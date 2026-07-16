@@ -146,3 +146,39 @@ valence/energy/danceability + tonality, and keeping the "sad banger" as the emot
   removed Playwright + the driver afterward to keep app deps to react/d3/vite only.
 - Honesty carried into the app: the closing beat states music tracks neither the economy nor
   sentiment, and the footer flags the "why" as hypotheses, not this dataset's answer.
+
+## 2026-07-16 — App: one journey → four (a story-switcher)
+
+Jesse liked the decade-journey graphic and wanted **multiple journeys, each telling a different
+story**, with example songs picked *for the specific metrics each journey plots*. Turned the single
+mood journey + three static "beats" (which already named the stories) into **one tabbed journey**
+(chosen over stacking four full journeys, to avoid 4× scroll and make stories comparable):
+- **Four planes:** Mood (valence×energy), The beat (energy×danceability), Two kinds of sad
+  (valence×minor-key), Why so intense (energy×acousticness). Tabs swap the plane, tracks, captions,
+  highlighted dials, and the spotlight colour; the 11-decade scroll column persists.
+- **Tracks are now per-journey.** `export_app_data.py` picks each decade's 3 representative tracks
+  nearest the centroid **in the z-space of that journey's two plotted metrics** (for the sad journey,
+  the tonal axis is per-track `mode`). `tracks.json` is now nested `{journeyId: {decade: [...]}}`
+  (still a few KB). `timeline.json`/`world.json` unchanged.
+- The year-based "Does music mirror the world?" beat stays as a closing coda (not a decade plane).
+- **AI disclosure:** the component generalization (`MoodSpace`/`Journey` props, the export loop) and
+  the 33 new per-decade captions (beat/sad/intensity) are Claude-generated, reviewed by Jesse.
+
+### What's next — better song picking
+Current pick (in `export_app_data.py`): per journey, per decade, take the top-100 tracks by popularity,
+then the 3 nearest that plane's centroid in the z-space of its two plotted metrics. It's simple and
+"sounds like the dot," but has clear room to improve:
+- **Diversity guard.** The 3 picks can bunch up — same lead artist, a remaster/alt-version of the same
+  song, or a track that resurfaces across journeys/decades. Enforce distinct artists, de-dupe
+  remasters/live/alternate versions (normalize the title), and optionally forbid repeats across cells.
+- **Blend popularity with centrality** instead of a hard top-100 cut: score each track by
+  `w·(popularity, normalized *within* the decade) − distance-to-centroid`, so a very central but
+  slightly-less-famous track can win and the thin early decades (low absolute popularity) aren't
+  over-filtered.
+- **Show the spread, not just the mean.** Optionally surface one track *at* the centroid plus one or two
+  that represent the decade's variance (e.g. quadrant extremes), so the embed conveys range, not only
+  the average point.
+- **Better recognizability for old decades.** `popularity` is a present-day snapshot biased against
+  pre-1960s tracks; fold in a name-recognition proxy or a small editorial allowlist for early decades.
+- **Let the reader choose.** A "most central ↔ most iconic" toggle to trade representativeness for
+  familiarity, reusing the same scoring with a different weight.

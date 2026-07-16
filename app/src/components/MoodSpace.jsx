@@ -5,38 +5,48 @@ import { extent } from 'd3-array'
 
 const W = 560
 const H = 470
-const M = { t: 26, r: 30, b: 62, l: 60 }
+const M = { t: 26, r: 30, b: 62, l: 82 }
 
 function pad([a, b], p) {
   return [a - p, b + p]
 }
 
-// The hero: music's path across the valence×energy plane, with the active decade
-// as a spotlighted dot (size = minor-key share). Position animates via CSS.
-export default function MoodSpace({ decades, active }) {
+// Axis labels are "← low   name   high →" (triple-spaced); split so the low/high
+// descriptors can sit at the plot's edges and the name stays centered.
+function splitAxis(label) {
+  const parts = label.split(/\s{2,}/)
+  return parts.length === 3 ? parts : [null, label, null]
+}
+
+// The hero: music's path across a two-metric plane, with the active decade as a
+// spotlighted dot (size = a third metric). Axes, size metric and colour are set per
+// journey via props. Position animates via CSS.
+export default function MoodSpace({ decades, active, xKey, yKey, xLabel, yLabel, sizeKey, accent }) {
   const x = useMemo(
-    () => scaleLinear().domain(pad(extent(decades, (d) => d.valence), 0.015)).range([M.l, W - M.r]),
-    [decades],
+    () => scaleLinear().domain(pad(extent(decades, (d) => d[xKey]), 0.015)).range([M.l, W - M.r]),
+    [decades, xKey],
   )
   const y = useMemo(
-    () => scaleLinear().domain(pad(extent(decades, (d) => d.energy), 0.04)).range([H - M.b, M.t]),
-    [decades],
+    () => scaleLinear().domain(pad(extent(decades, (d) => d[yKey]), 0.04)).range([H - M.b, M.t]),
+    [decades, yKey],
   )
   const size = useMemo(
-    () => scaleLinear().domain(extent(decades, (d) => d.minor_share)).range([8, 24]),
-    [decades],
+    () => scaleLinear().domain(extent(decades, (d) => d[sizeKey])).range([8, 24]),
+    [decades, sizeKey],
   )
   const path = useMemo(
-    () => d3line().x((d) => x(d.valence)).y((d) => y(d.energy))(decades),
-    [decades, x, y],
+    () => d3line().x((d) => x(d[xKey])).y((d) => y(d[yKey]))(decades),
+    [decades, x, y, xKey, yKey],
   )
 
   const cur = decades[active]
-  const rNow = size(cur.minor_share) // marker radius = minor-key share
+  const rNow = size(cur[sizeKey]) // marker radius = the journey's size metric
+  const [xLow, xName, xHigh] = splitAxis(xLabel)
+  const [yLow, yName, yHigh] = splitAxis(yLabel)
 
   return (
     <svg className="moodspace" viewBox={`0 0 ${W} ${H}`} role="img"
-      aria-label={`Mood-space position for the ${cur.decade}s: valence ${cur.valence}, energy ${cur.energy}`}>
+      aria-label={`Position for the ${cur.decade}s: ${xName} ${cur[xKey]}, ${yName} ${cur[yKey]}`}>
       {/* gridlines + numeric ticks */}
       {x.ticks(4).map((t) => (
         <g key={`x${t}`}>
@@ -54,13 +64,19 @@ export default function MoodSpace({ decades, active }) {
       <line className="ms-axis-line" x1={M.l} x2={W - M.r} y1={H - M.b} y2={H - M.b} />
       <line className="ms-axis-line" x1={M.l} x2={M.l} y1={M.t} y2={H - M.b} />
 
-      {/* axis direction labels */}
-      <text className="ms-axis" x={(M.l + W - M.r) / 2} y={H - 16} textAnchor="middle">
-        ← sadder&nbsp;&nbsp;&nbsp;valence&nbsp;&nbsp;&nbsp;happier →
+      {/* axis direction labels — descriptors pushed to the plot's edges, name centred */}
+      {xLow && <text className="ms-axis" x={M.l} y={H - 16} textAnchor="start">{xLow}</text>}
+      <text className="ms-axis ms-axis-title" x={(M.l + W - M.r) / 2} y={H - 16} textAnchor="middle">{xName}</text>
+      {xHigh && <text className="ms-axis" x={W - M.r} y={H - 16} textAnchor="end">{xHigh}</text>}
+      {yLow && (
+        <text className="ms-axis" transform={`translate(22,${H - M.b}) rotate(-90)`} textAnchor="start">{yLow}</text>
+      )}
+      <text className="ms-axis ms-axis-title" transform={`translate(22,${(M.t + H - M.b) / 2}) rotate(-90)`} textAnchor="middle">
+        {yName}
       </text>
-      <text className="ms-axis" transform={`translate(18,${(M.t + H - M.b) / 2}) rotate(-90)`} textAnchor="middle">
-        ← calmer&nbsp;&nbsp;&nbsp;energy&nbsp;&nbsp;&nbsp;more intense →
-      </text>
+      {yHigh && (
+        <text className="ms-axis" transform={`translate(22,${M.t}) rotate(-90)`} textAnchor="end">{yHigh}</text>
+      )}
 
       {/* the century path */}
       <path className="ms-path" d={path} />
@@ -69,15 +85,15 @@ export default function MoodSpace({ decades, active }) {
       {decades.map((d, i) => (
         <circle
           key={d.decade}
-          cx={x(d.valence)}
-          cy={y(d.energy)}
+          cx={x(d[xKey])}
+          cy={y(d[yKey])}
           r={3.5}
           className={`ms-dot ${i <= active ? 'past' : 'future'}`}
         />
       ))}
 
-      {/* the spotlighted current decade (position animates) */}
-      <g className="ms-now" style={{ transform: `translate(${x(cur.valence)}px, ${y(cur.energy)}px)` }}>
+      {/* the spotlighted current decade (position animates); colour = journey accent */}
+      <g className="ms-now" style={{ transform: `translate(${x(cur[xKey])}px, ${y(cur[yKey])}px)`, '--accent': accent }}>
         <circle className="ms-now-halo" r={rNow + 7} />
         <circle className="ms-now-core" r={rNow} />
         <text className="ms-now-label" x={rNow + 12} dy="0.32em">

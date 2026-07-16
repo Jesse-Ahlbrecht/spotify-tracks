@@ -28,14 +28,14 @@ npm run build      # static bundle in app/dist/ (deployable as a static site)
 - **Python computes, React reads.** All numbers come from `analysis/common.py` (the
   same loaders the notebooks use); `scripts/export_app_data.py` does every derivation
   (per-decade aggregates, representative-track selection, and the economy join +
-  z-scoring) and writes compact JSON to `public/data/` (~9 KB total). The app only
+  z-scoring) and writes compact JSON to `public/data/` (~18 KB total). The app only
   reads and renders — the browser never sees the 587k-row dataset.
 - **Vite + React (plain JSX)**, charts hand-rolled in SVG with `d3-scale`/`d3-shape`
   (no chart library), following the repo's `dataviz` conventions (accessible palette,
   light/dark, one axis — never dual).
-- **Structure:** `src/components/` (the sticky journey — `MoodSpace`, `Readouts`,
-  `TrackEmbed`), `src/charts/` (`LineFig` + the four beats), `src/lib.js` (data
-  loading, the scroll hooks, palette/caption constants).
+- **Structure:** `src/components/` (the sticky journey — `MoodSpace`, `TrackEmbed`),
+  `src/charts/` (`LineFig` + the `WorldChart` coda), `src/lib.js` (data loading, the
+  scroll hooks, palette/caption/journey constants).
 
 Phase 1 (this) is the guided journey. Phase 2 (planned): a free-explore mode with a
 song search that places any track in mood-space and finds its acoustic neighbors.
@@ -43,3 +43,6 @@ song search that places any track in mood-space and finds its acoustic neighbors
 Song previews are embedded from Spotify and require a network connection; the
 representative track per decade is the most popular track nearest that decade's mood
 centre, with a direct link as fallback.
+
+See the [repo README](../README.md) for the full story, data provenance, and the AI
+disclosure; [`../docs/decisions.md`](../docs/decisions.md) is the running decision log.

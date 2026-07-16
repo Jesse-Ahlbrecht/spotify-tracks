@@ -16,7 +16,15 @@ import pandas as pd
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "analysis"))
 from common import load_timeline, load_misery, load_sentiment, ART  # noqa: E402
 
-FEATS = ["valence", "energy", "danceability"]
+# Each journey picks its 3 representative tracks near the decade's centroid *in the space of the
+# two metrics that journey plots* (see app JOURNEYS). `minor` is the per-track minor/major flag
+# behind the "minor key / tonal sadness" axis.
+JOURNEY_FEATS = {
+    "mood": ["valence", "energy"],
+    "beat": ["energy", "danceability"],
+    "sad": ["valence", "minor"],
+    "intensity": ["energy", "acousticness"],
+}
 
 
 def r(x, n=3):
@@ -45,12 +53,9 @@ def main():
 
     timeline = {"decades": [{"decade": int(d), **agg(g)} for d, g in df.groupby("decade")]}
 
-    # --- representative tracks per decade (for the Spotify embeds) ---
-    # Recognizable (top popularity) AND near the decade's mood centroid, so the embed
-    # sounds like that point on the journey.
-    z = (df[FEATS] - df[FEATS].mean()) / df[FEATS].std()
-    centroid = z.assign(decade=df.decade.values).groupby("decade")[FEATS].mean()
-
+    # --- representative tracks per journey, per decade (for the Spotify embeds) ---
+    # For each journey: recognizable (top popularity) AND nearest the decade's centroid in the
+    # z-scored space of *that journey's two plotted metrics*, so the embed sounds like that point.
     def first_artist(s):
         try:
             lst = ast.literal_eval(s)
@@ -58,15 +63,21 @@ def main():
         except (ValueError, SyntaxError):
             return str(s)
 
-    tracks = {}
-    for d, g in df.groupby("decade"):
-        top = g.sort_values("popularity", ascending=False).head(40)
-        dist = ((z.loc[top.index] - centroid.loc[d]) ** 2).sum(axis=1)
-        pick = top.loc[dist.sort_values().index[:3]]
-        tracks[str(int(d))] = [
-            {"id": row["id"], "name": row["name"], "artist": first_artist(row["artists"])}
-            for _, row in pick.iterrows()
-        ]
+    def pick_tracks(feats):
+        z = (df[feats] - df[feats].mean()) / df[feats].std()
+        centroid = z.assign(decade=df.decade.values).groupby("decade")[feats].mean()
+        out = {}
+        for d, g in df.groupby("decade"):
+            top = g.sort_values("popularity", ascending=False).head(100)
+            dist = ((z.loc[top.index] - centroid.loc[d]) ** 2).sum(axis=1)
+            pick = top.loc[dist.sort_values().index[:3]]
+            out[str(int(d))] = [
+                {"id": row["id"], "name": row["name"], "artist": first_artist(row["artists"])}
+                for _, row in pick.iterrows()
+            ]
+        return out
+
+    tracks = {jid: pick_tracks(feats) for jid, feats in JOURNEY_FEATS.items()}
 
     # --- music mood vs the world, joined + z-scored here (one axis in the app) ---
     valence_by_year = df.groupby("year")["valence"].mean()
