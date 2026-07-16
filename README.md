@@ -141,3 +141,9 @@ a claim, we say so rather than smoothing it over. The running log is in [`docs/d
   **lyrics** (sentiment, themes) and **real listening data** to separate what artists *make* from what
   audiences *choose*. Strictly correlational and multiple-comparisons-aware, but it would turn "likely
   genre/streaming/culture" into testable, ranked candidate explanations.
+
+## License
+
+Released under the **GNU General Public License v3.0** — a copyleft license: you're free to use,
+study, share, and modify this code, provided derivative works are distributed under the same terms.
+Full text in [LICENSE](LICENSE). (The Spotify datasets and FRED series retain their own terms.)
