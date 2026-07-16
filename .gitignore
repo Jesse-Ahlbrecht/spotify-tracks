@@ -1,0 +1,15 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Data (raw dumps are large + redistributable via download script)
+data/raw/
+
+# Node / React
+node_modules/
+app/dist/
+
+# OS/editor
+.DS_Store

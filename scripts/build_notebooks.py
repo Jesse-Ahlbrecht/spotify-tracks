@@ -1,0 +1,584 @@
+"""Authoring tool: build the exploration notebooks with nbformat, then they are executed
+by nbconvert (see README / commands). Kept in the repo so the notebooks are reproducible.
+
+Run:  python scripts/build_notebooks.py   # writes notebooks/*.ipynb (unexecuted)
+Then: jupyter nbconvert --to notebook --execute --inplace notebooks/*.ipynb
+"""
+from __future__ import annotations
+from pathlib import Path
+import nbformat as nbf
+
+NB_DIR = Path(__file__).resolve().parent.parent / "notebooks"
+NB_DIR.mkdir(exist_ok=True)
+
+KERNEL = {"display_name": "Python 3 (.venv)", "language": "python", "name": "python3"}
+
+# Every notebook starts by putting analysis/ on the path and setting a consistent visual style.
+BOOT = (
+    "import sys, pathlib\n"
+    "sys.path.insert(0, str(pathlib.Path.cwd().parent / 'analysis'))\n"
+    "%matplotlib inline\n"
+    "import numpy as np, pandas as pd\n"
+    "import matplotlib.pyplot as plt\n"
+    "import seaborn as sns\n"
+    "sns.set_theme(style='whitegrid', context='notebook')\n"
+    "plt.rcParams['figure.dpi'] = 110\n"
+    "from common import load_genre, load_timeline, AUDIO, zscore"
+)
+
+
+def md(text):
+    return nbf.v4.new_markdown_cell(text)
+
+
+def code(src):
+    return nbf.v4.new_code_cell(src)
+
+
+def write(name, cells):
+    nb = nbf.v4.new_notebook()
+    nb.cells = cells
+    nb.metadata["kernelspec"] = KERNEL
+    nb.metadata["language_info"] = {"name": "python"}
+    nbf.write(nb, NB_DIR / name)
+    print("wrote", NB_DIR / name)
+
+
+# ================================================================ 00 setup ====
+write("00_setup_and_data.ipynb", [
+    md("# 00 · Setup & the data\n\n"
+       "**Project:** explore Spotify audio-feature data to find a story worth telling.\n\n"
+       "We use two public Kaggle datasets (both download without auth via "
+       "`scripts/download_data.sh`):\n\n"
+       "| | dataset | rows | has genre? | has year? |\n"
+       "|---|---|---|---|---|\n"
+       "| **A** | `ultimate-spotify-tracks-db` | ~232k | ✅ 26 genres | ❌ |\n"
+       "| **B** | `spotify-dataset-19212020-600k` | ~587k | ⚠️ (via artists) | ✅ 1922–2021 |\n\n"
+       "Both expose the same **9 continuous audio features**, which is what makes them comparable. "
+       "This notebook loads, cleans, profiles, and — most importantly — *shows* you the data."),
+    code(BOOT),
+    md("## Dataset A — genre + audio features\n"
+       "One row per *(track, genre)* pair, so a track can appear several times."),
+    code("a = load_genre()\n"
+         "print(f'{len(a):,} rows · {a.track_id.nunique():,} unique tracks · {a.genre.nunique()} genres')\n"
+         "a.head(3)"),
+    md("### How fuzzy are genre labels?\n"
+       "If the *same track* is filed under several genres, the boundaries are already blurry."),
+    code("per_track = a.groupby('track_id')['genre'].nunique()\n"
+         "multi = (per_track > 1).mean()\n"
+         "print(f'{multi:.1%} of tracks carry 2+ genre labels (max {per_track.max()} on one track)')\n"
+         "vc = per_track.value_counts().sort_index()\n"
+         "ax = vc.plot.bar(color='#8f2d56', width=.8)\n"
+         "ax.set_title('How many genres is each track labelled with?')\n"
+         "ax.set_xlabel('# genres on the track'); ax.set_ylabel('tracks'); plt.tight_layout(); plt.show()"),
+    md("**Takeaway:** ~1 in 5 tracks is officially multi-genre — a first hint that genres overlap."),
+    md("## Dataset B — the 100-year timeline\n"
+       "`load_timeline()` parses `release_date` into `year`/`decade` and drops bad years."),
+    code("b = load_timeline()\n"
+         "print(f'{len(b):,} rows · years {b.year.min()}–{b.year.max()}')\n"
+         "b[['name','artists','year','energy','valence','acousticness']].head(3)"),
+    code("dec = b.decade.value_counts().sort_index()\n"
+         "ax = dec.plot.bar(color='#3d348b', width=.85)\n"
+         "ax.set_title('Tracks per decade (dataset B)'); ax.set_xlabel('decade'); ax.set_ylabel('tracks')\n"
+         "plt.tight_layout(); plt.show()"),
+    md("**Takeaway:** solid coverage from the 1920s to the 2020s — enough to study change over time."),
+    md("## The audio features, explained\n\n"
+       "Spotify's audio analysis reduces every track to a handful of numbers. Most are algorithmic "
+       "*estimates* (a model's best guess from the waveform), not ground truth — worth remembering when "
+       "we interpret them. These **nine continuous features** are shared by both datasets and drive the "
+       "whole analysis:\n\n"
+       "| feature | range | what it means |\n"
+       "|---|---|---|\n"
+       "| **acousticness** | 0–1 | confidence the track is *acoustic* (guitars/piano vs synths/electric). |\n"
+       "| **danceability** | 0–1 | how danceable — tempo regularity, beat strength, rhythm stability. |\n"
+       "| **energy** | 0–1 | perceived intensity & activity: fast, loud, noisy → high. |\n"
+       "| **instrumentalness** | 0–1 | likelihood of *no vocals* (>0.5 ≈ probably instrumental). |\n"
+       "| **liveness** | 0–1 | probability it was recorded *live* (audience present). |\n"
+       "| **loudness** | ~ −60→0 dB | overall average loudness (louder = closer to 0). |\n"
+       "| **speechiness** | 0–1 | presence of *spoken words* (>0.66 ≈ talk/podcast; <0.33 ≈ music). |\n"
+       "| **tempo** | BPM | estimated speed in beats per minute. |\n"
+       "| **valence** | 0–1 | musical *positivity* — high = happy/cheerful, low = sad/angry. |\n\n"
+       "The datasets also carry descriptive fields we use as context but not as features: "
+       "`popularity` (0–100), `key` & `mode` (major/minor), `duration_ms`, and `time_signature`."),
+    md("Their actual ranges and central tendencies (dataset A):"),
+    code("a[AUDIO].describe().T[['mean','std','min','50%','max']].round(2)"),
+    md("### What each feature's distribution looks like\n"
+       "Note the skew: `speechiness`, `instrumentalness`, `liveness`, `acousticness` pile up near zero "
+       "with a long tail, while `danceability`, `energy`, and `valence` spread across the 0–1 range."),
+    code("fig, axes = plt.subplots(3, 3, figsize=(13, 9))\n"
+         "for ax, f in zip(axes.ravel(), AUDIO):\n"
+         "    sns.histplot(a[f], bins=40, ax=ax, color='#2e86ab')\n"
+         "    ax.set_title(f); ax.set_xlabel(''); ax.set_ylabel('')\n"
+         "fig.suptitle('Distribution of each audio feature (dataset A)', y=1.01, fontsize=14)\n"
+         "plt.tight_layout(); plt.show()"),
+    md("### How the features relate to each other\n"
+       "Some features move together. `energy`↔`loudness` are strongly positive; both are strongly "
+       "*negative* with `acousticness` — the seed of the 'electrification' story in notebook 02."),
+    code("corr = a[AUDIO].corr()\n"
+         "plt.figure(figsize=(8.5, 7))\n"
+         "sns.heatmap(corr, annot=True, fmt='.2f', cmap='RdBu_r', center=0, square=True,\n"
+         "            cbar_kws={'shrink': .8})\n"
+         "plt.title('Audio-feature correlations (dataset A)'); plt.tight_layout(); plt.show()"),
+    md("### A first glimpse of genre fingerprints\n"
+       "Average each feature within each genre, standardized across genres (red = high for that genre, "
+       "blue = low). Even at a glance, genres have distinct 'signatures' — but also share a lot. "
+       "Notebook 01 digs into how *real* those differences are."),
+    code("fp = a.groupby('genre')[AUDIO].mean()\n"
+         "fpz = (fp - fp.mean()) / fp.std()   # z-score each feature across genres\n"
+         "sns.clustermap(fpz, cmap='RdBu_r', center=0, figsize=(11, 10),\n"
+         "               dendrogram_ratio=.12, cbar_pos=(.02, .8, .03, .15))\n"
+         "plt.show()"),
+    md("**Takeaway:** the data is clean, spans a century, and every feature is defined and visualized. "
+       "On to the four questions."),
+])
+
+# ==================================================== 01 are genres real ======
+write("01_are_genres_real.ipynb", [
+    md("# 01 · Are genres real?\n\n"
+       "**The intuition:** liking one song doesn't mean you'll like another of the *same genre* any "
+       "more than a random song. Maybe genre is a weak proxy for what actually makes songs *sound* "
+       "alike. We test it — and *show* every step:\n\n"
+       "1. Do genres look different feature-by-feature? (distributions)\n"
+       "2. How much variance does genre explain? (eta²)\n"
+       "3. Can we predict genre from the sound? (classifier + confusion matrix)\n"
+       "4. Which genres sound alike? (genre-similarity heatmap)\n"
+       "5. Are a song's acoustic neighbors the same genre? (nearest-neighbor lift + a worked example)\n"
+       "6. Do genres separate visually? (PCA)"),
+    code(BOOT + "\n"
+         "from sklearn.model_selection import train_test_split\n"
+         "from sklearn.linear_model import LogisticRegression\n"
+         "from sklearn.ensemble import HistGradientBoostingClassifier\n"
+         "from sklearn.metrics import accuracy_score, confusion_matrix\n"
+         "from sklearn.neighbors import NearestNeighbors\n"
+         "from sklearn.decomposition import PCA\n"
+         "RNG = 42\n"
+         "df = load_genre()\n"
+         "print(f'{len(df):,} rows · {df.genre.nunique()} genres')"),
+    md("## Step 1 — Do genres actually look different?\n"
+       "Draw every feature's distribution for every genre (genres ordered by median energy, so the "
+       "same row = the same genre across all nine panels). If genres were real & distinct, the ridges "
+       "would sit in clearly different places. A few do (`speechiness` for Comedy, `acousticness` for "
+       "Classical/Opera); most overlap heavily."),
+    code("order = df.groupby('genre')['energy'].median().sort_values().index\n"
+         "fig, axes = plt.subplots(3, 3, figsize=(17, 16), sharey=True)\n"
+         "for ax, f in zip(axes.ravel(), AUDIO):\n"
+         "    sns.violinplot(df, x=f, y='genre', order=order, ax=ax, hue='genre',\n"
+         "                   legend=False, density_norm='width', linewidth=.3, palette='viridis')\n"
+         "    ax.set_title(f); ax.set_ylabel(''); ax.set_xlabel('')\n"
+         "    ax.tick_params(labelleft=True)   # repeat genre labels on every panel\n"
+         "fig.suptitle('Feature distributions by genre (rows ordered by median energy)', y=1.003,\n"
+         "             fontsize=15)\n"
+         "plt.tight_layout(); plt.show()"),
+    md("## Step 2 — How much does genre explain? (eta²)\n"
+       "eta² = fraction of a feature's variance that lies *between* genres rather than within them. "
+       "1.0 would mean genre fully determines the feature; 0 means genre tells you nothing."),
+    code("def eta_squared(df, feature, group='genre'):\n"
+         "    grand = df[feature].mean()\n"
+         "    ss_total = ((df[feature] - grand) ** 2).sum()\n"
+         "    ss_between = df.groupby(group)[feature].apply(lambda s: len(s)*(s.mean()-grand)**2).sum()\n"
+         "    return ss_between / ss_total\n\n"
+         "etas = pd.Series({f: eta_squared(df, f) for f in AUDIO}).sort_values()\n"
+         "ax = etas.plot.barh(color='#2e86ab')\n"
+         "ax.bar_label(ax.containers[0], fmt='%.2f', padding=3)\n"
+         "ax.set_title(f'Variance explained by genre (mean eta² = {etas.mean():.2f})')\n"
+         "ax.set_xlabel('eta²'); ax.set_xlim(0, .8); plt.tight_layout(); plt.show()"),
+    md("**Takeaway:** genre explains ~39% of feature variance on average — strong for `speechiness`, "
+       "near-zero for `tempo`. Real signal, but far from deterministic."),
+    md("## Step 3 — Can we predict genre from the sound?\n"
+       "Dedupe to one row per track (avoids leakage), standardize the 9 features, train two "
+       "classifiers. The bar to beat is *always guess the biggest genre*."),
+    code("uniq = df.sort_values('track_id').drop_duplicates('track_id').reset_index(drop=True)\n"
+         "X = zscore(uniq)\n"
+         "y = uniq['genre'].to_numpy()\n"
+         "Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.25, random_state=RNG, stratify=y)\n"
+         "baseline = pd.Series(ytr).value_counts(normalize=True).max()\n"
+         "lr = LogisticRegression(max_iter=1000).fit(Xtr, ytr)\n"
+         "gb = HistGradientBoostingClassifier(random_state=RNG).fit(Xtr, ytr)\n"
+         "pred = gb.predict(Xte)\n"
+         "scores = pd.Series({'majority\\nbaseline': baseline,\n"
+         "                    'logistic\\nregression': accuracy_score(yte, lr.predict(Xte)),\n"
+         "                    'gradient\\nboosting': accuracy_score(yte, pred)})\n"
+         "ax = scores.plot.bar(color=['#bbb','#2e86ab','#e4572e'], rot=0)\n"
+         "ax.bar_label(ax.containers[0], fmt='%.2f'); ax.set_ylim(0, .5)\n"
+         "ax.set_title('Predicting genre from audio features (accuracy)'); plt.tight_layout(); plt.show()"),
+    md("~0.39 vs a 0.055 baseline = **7× better than chance, but wrong ~61% of the time.** "
+       "The confusion matrix shows *where* it fails — bright off-diagonal cells are genres that get "
+       "mistaken for each other:"),
+    code("labels = sorted(np.unique(y))\n"
+         "cm = confusion_matrix(yte, pred, labels=labels, normalize='true')\n"
+         "plt.figure(figsize=(11, 9))\n"
+         "sns.heatmap(cm, xticklabels=labels, yticklabels=labels, cmap='magma',\n"
+         "            square=True, cbar_kws={'shrink': .7, 'label': 'fraction'})\n"
+         "plt.xlabel('predicted'); plt.ylabel('true'); plt.title('Genre confusion (row-normalized)')\n"
+         "plt.tight_layout(); plt.show()"),
+    md("**Takeaway:** a few genres are acoustically crisp (Comedy = spoken word, Classical, Opera), "
+       "but Pop, Rock, R&B, Rap/Hip-Hop bleed into each other. The mess *is* the finding."),
+    md("## Step 4 — Which genres sound alike?\n"
+       "Distance between genre 'centroids' in feature space, clustered. Genres that clump together are "
+       "acoustically near-indistinguishable (e.g. Rap/Hip-Hop, or the acoustic-leaning cluster)."),
+    code("cent = pd.DataFrame(X, columns=AUDIO).assign(genre=y).groupby('genre').mean()\n"
+         "from scipy.spatial.distance import pdist, squareform\n"
+         "dist = pd.DataFrame(squareform(pdist(cent)), index=cent.index, columns=cent.index)\n"
+         "sns.clustermap(dist, cmap='mako_r', figsize=(11, 10),\n"
+         "               dendrogram_ratio=.12, cbar_pos=(.02, .8, .03, .15))\n"
+         "plt.show()"),
+    md("## Step 5 — Are your acoustic neighbors the same genre?\n"
+       "The intuition made literal: for a sample of tracks, of the 10 nearest songs in feature space, "
+       "what fraction share the genre — versus a random pair?"),
+    code("nn = NearestNeighbors(n_neighbors=11).fit(X)\n"
+         "rng = np.random.default_rng(RNG)\n"
+         "q = rng.choice(len(X), size=5000, replace=False)\n"
+         "_, idx = nn.kneighbors(X[q])\n"
+         "same = (y[idx[:,1:]] == y[q][:,None]).mean(1)\n"
+         "base = (pd.Series(y).value_counts(normalize=True)**2).sum()\n"
+         "print(f'neighbors sharing genre: {same.mean():.1%}   random-pair base rate: {base:.1%}   "
+         "lift: {same.mean()/base:.1f}x')\n"
+         "plt.figure(figsize=(9, 4.5))\n"
+         "sns.histplot(same, bins=11, color='#3d348b', stat='percent')\n"
+         "plt.axvline(same.mean(), color='#e4572e', lw=2, label=f'mean {same.mean():.0%}')\n"
+         "plt.axvline(base, color='k', ls='--', lw=1.5, label=f'random {base:.0%}')\n"
+         "plt.xlabel('fraction of 10 nearest neighbors sharing the genre'); plt.ylabel('% of songs')\n"
+         "plt.title('For most songs, MOST acoustic neighbors are a different genre'); plt.legend()\n"
+         "plt.tight_layout(); plt.show()"),
+    md("### A worked example\n"
+       "Pick one popular track and list its 10 nearest neighbors with their genres — see the mix "
+       "for yourself."),
+    code("seed = uniq['popularity'].idxmax()\n"
+         "_, nbrs = nn.kneighbors(X[seed:seed+1], n_neighbors=11)\n"
+         "cols = ['track_name','artist_name','genre','popularity']\n"
+         "print('SEED:', uniq.loc[seed, ['track_name','artist_name','genre']].to_dict())\n"
+         "uniq.loc[nbrs[0][1:], cols].reset_index(drop=True)"),
+    md("**Takeaway:** a 6× lift — genre *does* predict acoustic similarity better than chance. "
+       "**But ~3 of every 4 of a song's nearest neighbors are a *different* genre.**"),
+    md("## Step 6 — Do genres separate in feature space? (PCA)\n"
+       "Two views: colored by genre (one big overlapping cloud + a couple of outliers), and a density "
+       "map showing where songs actually concentrate."),
+    code("Z = PCA(n_components=2, random_state=RNG).fit_transform(X)\n"
+         "samp = rng.choice(len(X), size=15000, replace=False)\n"
+         "fig, ax = plt.subplots(1, 2, figsize=(15, 6))\n"
+         "cats = pd.Categorical(y[samp])\n"
+         "ax[0].scatter(Z[samp,0], Z[samp,1], c=cats.codes, cmap='tab20', s=4, alpha=.4)\n"
+         "ax[0].set_title('Colored by genre'); ax[0].set_xlabel('PC1'); ax[0].set_ylabel('PC2')\n"
+         "sns.kdeplot(x=Z[samp,0], y=Z[samp,1], fill=True, cmap='mako', levels=30, ax=ax[1])\n"
+         "ax[1].set_title('Density of songs'); ax[1].set_xlabel('PC1'); ax[1].set_ylabel('PC2')\n"
+         "plt.tight_layout(); plt.show()"),
+    md("## Verdict\n"
+       "**Genres are *real-ish*.** There's a genuine acoustic signal (6× neighbor lift, 7× "
+       "classifier), but genres overlap heavily — one big cloud with a couple of crisp outliers. "
+       "Genre is a *weak* summary of how music actually sounds — the most personal, interactive "
+       "story, and a great candidate for the app."),
+])
+
+# ==================================================== 02 music as fashion =====
+write("02_music_as_fashion.ipynb", [
+    md("# 02 · Is music like fashion?\n\n"
+       "**The question:** fashion recurs — flares, then skinny, then flares again. Does music do the "
+       "same, with themes returning every few decades? We test it on the 100-year timeline (B)."),
+    code(BOOT + "\n"
+         "df = load_timeline()\n"
+         "zdf = pd.DataFrame(zscore(df), columns=AUDIO).assign(decade=df.decade.values)\n"
+         "by_decade = zdf.groupby('decade')[AUDIO].mean()\n"
+         "print('decades:', list(by_decade.index))"),
+    md("## Step 1 — The sound of each decade (heatmap)\n"
+       "Standardized features, decade by decade. Red = high, blue = low. Read it top-to-bottom and "
+       "watch the color flip around 1970–80: the 'electrification' of music."),
+    code("plt.figure(figsize=(11, 7))\n"
+         "sns.heatmap(by_decade, annot=True, fmt='.1f', cmap='RdBu_r', center=0,\n"
+         "            cbar_kws={'label': 'mean (z-score)', 'shrink': .8})\n"
+         "plt.title('Sound of each decade (standardized audio features)')\n"
+         "plt.xlabel('feature'); plt.ylabel('decade'); plt.tight_layout(); plt.show()"),
+    md("## Step 2 — Each feature's trajectory (small multiples)\n"
+       "One panel per feature so no line hides another. Most are monotone drifts, not up-and-down "
+       "cycles."),
+    code("fig, axes = plt.subplots(3, 3, figsize=(14, 9), sharex=True)\n"
+         "for ax, f in zip(axes.ravel(), AUDIO):\n"
+         "    ax.plot(by_decade.index, by_decade[f], marker='o', color='#3d348b')\n"
+         "    ax.axhline(0, color='k', lw=.5, alpha=.4); ax.set_title(f)\n"
+         "fig.suptitle('Each audio feature across the decades (z-score)', y=1.01, fontsize=14)\n"
+         "plt.tight_layout(); plt.show()"),
+    md("## Step 3 — Does the past recur? (decade-similarity matrix)\n"
+       "Similarity between each pair of decade centroids. If music were cyclical, non-adjacent decades "
+       "would light up (bright off-diagonal). If it just drifts, we'll see a diagonal band that fades "
+       "with distance."),
+    code("from scipy.spatial.distance import pdist, squareform\n"
+         "C = by_decade.to_numpy()\n"
+         "D = squareform(pdist(C))\n"
+         "sim = 1/(1+D)\n"
+         "labs = [f'{d}s' for d in by_decade.index]\n"
+         "plt.figure(figsize=(8.5, 7))\n"
+         "sns.heatmap(sim, xticklabels=labs, yticklabels=labs, cmap='viridis', square=True,\n"
+         "            cbar_kws={'label': 'similarity', 'shrink': .8})\n"
+         "plt.title('Decade similarity — bright off-diagonal would mean recurrence')\n"
+         "plt.tight_layout(); plt.show()"),
+    code("decs = by_decade.index.to_numpy()\n"
+         "print('Which earlier, non-adjacent decade does each most resemble?')\n"
+         "for i, d in enumerate(decs):\n"
+         "    older = [(decs[j], D[i, j]) for j in range(i-1)]\n"
+         "    if older:\n"
+         "        best = min(older, key=lambda t: t[1])\n"
+         "        print(f'  {d}s -> {best[0]}s (dist {best[1]:.2f})')"),
+    md("## Verdict\n"
+       "**Music is a one-way river, not a cycle.** The matrix is a strong diagonal band that fades "
+       "with distance; the 2010s corner and the 1950s corner are dark. Each decade most resembles its "
+       "*immediate* neighbors — no fashion-style return. The honest answer *refutes* the hypothesis, "
+       "which is itself a clean, visual story."),
+])
+
+# ==================================================== 03 mood over time ========
+write("03_mood_over_time.ipynb", [
+    md("# 03 · The mood of music over time\n\n"
+       "**The question:** does the emotional tone of music shift across the century? We chart "
+       "`valence` (musical positivity), `energy`, and `danceability`, look at whole *distributions* "
+       "(not just averages), and trace music's path through 'mood-space'."),
+    code(BOOT + "\n"
+         "df = load_timeline()\n"
+         "EVENTS = {1929:'Depression', 1945:'WWII ends', 1969:'Woodstock', 1981:'MTV',\n"
+         "          2008:'Financial crisis', 2020:'COVID'}\n"
+         "yr = df.groupby('year')[['valence','energy','danceability']].mean()\n"
+         "yr.tail(3)"),
+    md("## Step 1 — Three emotional signals across a century"),
+    code("plt.figure(figsize=(12, 6))\n"
+         "for f, c in [('valence','#e4572e'), ('energy','#2e86ab'), ('danceability','#8f2d56')]:\n"
+         "    plt.plot(yr.index, yr[f], label=f, color=c, lw=2)\n"
+         "for y0, name in EVENTS.items():\n"
+         "    plt.axvline(y0, color='k', ls=':', lw=.8, alpha=.5)\n"
+         "    plt.text(y0, plt.ylim()[1], name, rotation=90, va='top', ha='right', fontsize=8, alpha=.6)\n"
+         "plt.title('Mood of music over time (0–1 features)')\n"
+         "plt.xlabel('year'); plt.ylabel('mean'); plt.legend(); plt.tight_layout(); plt.show()"),
+    md("## Step 2 — Not just the average: the whole distribution per decade\n"
+       "Averages can hide things. These violins show the full spread of `valence` and `energy` within "
+       "each decade — energy clearly marches up and its distribution shifts wholesale."),
+    code("dv = df.assign(decade=df.decade.astype(str))\n"
+         "order = [str(d) for d in sorted(df.decade.unique())]\n"
+         "fig, axes = plt.subplots(1, 2, figsize=(15, 6), sharey=True)\n"
+         "for ax, f, cmap in [(axes[0],'valence','flare'), (axes[1],'energy','crest')]:\n"
+         "    sns.violinplot(dv, x='decade', y=f, order=order, ax=ax, hue='decade', hue_order=order,\n"
+         "                   legend=False, density_norm='width', linewidth=.5, palette=cmap)\n"
+         "    ax.set_title(f'{f} by decade'); ax.set_xlabel(''); ax.tick_params(axis='x', rotation=90)\n"
+         "plt.tight_layout(); plt.show()"),
+    md("## Step 3 — Music's path through 'mood-space'\n"
+       "Plot each decade's average position on the valence×energy plane (the classic mood quadrants). "
+       "The arrow of time shows music drifting from *calm/positive* toward *intense*."),
+    code("me = df.groupby('decade')[['valence','energy']].mean()\n"
+         "fig, ax = plt.subplots(figsize=(9, 8))\n"
+         "ax.plot(me['valence'], me['energy'], '-', color='#999', lw=1, zorder=1)\n"
+         "sc = ax.scatter(me['valence'], me['energy'], c=me.index, cmap='viridis', s=180, zorder=2,\n"
+         "                edgecolor='white')\n"
+         "for d, r in me.iterrows(): ax.annotate(f'{d}s', (r['valence'], r['energy']),\n"
+         "                                       textcoords='offset points', xytext=(8, 0), fontsize=9)\n"
+         "# quadrant labels anchored to the axes corners (data is zoomed, so use axes fractions)\n"
+         "for q, xy, ha, va in [('calm / positive',(.98,.02),'right','bottom'),\n"
+         "                      ('happy / intense',(.98,.98),'right','top'),\n"
+         "                      ('sad / calm',(.02,.02),'left','bottom'),\n"
+         "                      ('dark / intense',(.02,.98),'left','top')]:\n"
+         "    ax.text(*xy, q, transform=ax.transAxes, ha=ha, va=va, color='#e4572e', alpha=.7, fontsize=11)\n"
+         "fig.colorbar(sc, ax=ax, label='decade'); ax.set_xlabel('← sadder    valence (positivity)    happier →')\n"
+         "ax.set_ylabel('← calmer    energy    more intense →')\n"
+         "ax.set_title(\"Music's journey through mood-space, decade by decade\")\n"
+         "plt.tight_layout(); plt.show()"),
+    code("for lo, hi in [(1960,1969), (2010,2019)]:\n"
+         "    v, e = yr.loc[lo:hi,'valence'].mean(), yr.loc[lo:hi,'energy'].mean()\n"
+         "    print(f'{lo}s: valence {v:.3f} · energy {e:.3f}')"),
+    md("## Verdict\n"
+       "**Energy nearly doubles** over the century while **valence quietly declines**, sharply after "
+       "2000 — modern music is *louder and more intense but less overtly happy.* The mood-space path "
+       "makes the drift vivid. This is correlational, though: a causal read would join an economic / "
+       "sentiment series (misery index) — see *what's next*."),
+])
+
+# =============================================== 04 converging to a formula ====
+write("04_converging_to_a_formula.ipynb", [
+    md("# 04 · Is music converging to a formula?\n\n"
+       "**The question:** people say 'everything sounds the same now.' If true, the *spread* of audio "
+       "features within a year should shrink over time. Let's measure — and picture — it."),
+    code(BOOT + "\n"
+         "df = load_timeline()\n"
+         "zdf = pd.DataFrame(zscore(df), columns=AUDIO).assign(year=df.year.values)\n"
+         "disp = zdf.groupby('year')[AUDIO].std().mean(axis=1)\n"
+         "print(f'dispersion 1960: {disp.loc[1960]:.3f} · 2000: {disp.loc[2000]:.3f} · 2020: {disp.loc[2020]:.3f}')"),
+    md("## Step 1 — Average feature spread per year\n"
+       "Mean standard deviation across the 9 (standardized) features. Lower = more homogeneous. Note "
+       "the step-down shaded from 2000 on."),
+    code("plt.figure(figsize=(12, 5.5))\n"
+         "plt.plot(disp.index, disp.values, color='#3d348b', lw=2)\n"
+         "plt.axvspan(2000, disp.index.max(), color='#3d348b', alpha=.08)\n"
+         "plt.title('Average spread of audio features per year (down = homogenizing)')\n"
+         "plt.xlabel('year'); plt.ylabel('mean feature std (z-space)'); plt.tight_layout(); plt.show()"),
+    md("## Step 2 — Which features are converging? (small multiples)\n"
+       "Spread *per feature* per year. Not everything narrows equally — some features homogenize "
+       "much more than others."),
+    code("sd = zdf.groupby('year')[AUDIO].std()\n"
+         "fig, axes = plt.subplots(3, 3, figsize=(14, 9), sharex=True)\n"
+         "for ax, f in zip(axes.ravel(), AUDIO):\n"
+         "    ax.plot(sd.index, sd[f], color='#e4572e'); ax.set_title(f)\n"
+         "fig.suptitle('Spread (std) of each feature per year', y=1.01, fontsize=14)\n"
+         "plt.tight_layout(); plt.show()"),
+    md("## Step 3 — See the narrowing directly\n"
+       "The full distribution of *every* feature by decade. `acousticness` collapses toward the low "
+       "end as electronic production takes over; several others (energy, loudness, danceability) shift "
+       "and tighten too — a concrete, distribution-level picture of the homogenization above."),
+    code("dv = df.assign(decade=df.decade.astype(str))\n"
+         "order = [str(d) for d in sorted(df.decade.unique())]\n"
+         "fig, axes = plt.subplots(3, 3, figsize=(17, 14), sharex=True)\n"
+         "for ax, f in zip(axes.ravel(), AUDIO):\n"
+         "    sns.violinplot(dv, x='decade', y=f, order=order, ax=ax, hue='decade', hue_order=order,\n"
+         "                   legend=False, density_norm='width', linewidth=.3, palette='crest')\n"
+         "    ax.set_title(f); ax.set_xlabel(''); ax.tick_params(axis='x', rotation=90)\n"
+         "fig.suptitle('Distribution of each audio feature by decade', y=1.004, fontsize=15)\n"
+         "plt.tight_layout(); plt.show()"),
+    md("## Step 4 — Fewer *archetypes*? (the multivariate view)\n"
+       "Per-feature spread shrinking doesn't prove there are fewer *kinds* of music — features could "
+       "recombine in just as many ways. So we look at the **joint** distribution, three ways, per "
+       "decade. Each decade is subsampled to the same N so 'diversity' isn't just an artifact of the "
+       "catalog growing:\n\n"
+       "- **Effective # of archetypes** — cluster the sound-space into 24 prototype sounds, then take "
+       "the *perplexity* (exp-entropy) of how a decade's tracks spread across them. Higher = more kinds.\n"
+       "- **Effective dimensionality** — participation ratio of the decade's covariance: how many "
+       "independent 'style axes' music varies along.\n"
+       "- **Mean radius** — average distance from the decade's centroid: overall spread."),
+    code("from sklearn.cluster import KMeans\n"
+         "Xs = zscore(df); dec = df['decade'].to_numpy()\n"
+         "lab = KMeans(n_clusters=24, n_init=5, random_state=42).fit_predict(Xs)\n"
+         "decades = sorted(np.unique(dec)); N = min((dec==d).sum() for d in decades)\n"
+         "rng = np.random.default_rng(0)\n"
+         "def perplexity(idx):\n"
+         "    p = np.bincount(lab[idx], minlength=24)/len(idx); p = p[p>0]\n"
+         "    return np.exp(-(p*np.log(p)).sum())\n"
+         "rows = []\n"
+         "for d in decades:\n"
+         "    pool = np.where(dec==d)[0]; ea=[]; pr=[]; rad=[]\n"
+         "    for _ in range(8):\n"
+         "        s = rng.choice(pool, N, replace=False)\n"
+         "        ea.append(perplexity(s))\n"
+         "        ev = np.linalg.eigvalsh(np.cov(Xs[s].T)); ev = ev[ev>0]\n"
+         "        pr.append(ev.sum()**2/(ev**2).sum())\n"
+         "        rad.append(np.linalg.norm(Xs[s]-Xs[s].mean(0), axis=1).mean())\n"
+         "    rows.append((d, np.mean(ea), np.mean(pr), np.mean(rad)))\n"
+         "m = pd.DataFrame(rows, columns=['decade','archetypes','eff_dim','radius']).set_index('decade')\n"
+         "fig, ax = plt.subplots(1, 3, figsize=(16, 4.5))\n"
+         "for a, col, ttl, c in [(ax[0],'archetypes','Effective # of archetypes','#e4572e'),\n"
+         "                       (ax[1],'eff_dim','Effective dimensionality (style axes)','#2e86ab'),\n"
+         "                       (ax[2],'radius','Mean radius (overall spread)','#3d348b')]:\n"
+         "    a.plot(m.index, m[col], marker='o', color=c); a.set_title(ttl); a.set_xlabel('decade')\n"
+         "peak = m['archetypes'].idxmax()\n"
+         "ax[0].axvline(peak, color='k', ls=':', lw=1); ax[0].text(peak, m['archetypes'].min(),\n"
+         "              f' peak {peak}s', fontsize=9)\n"
+         "plt.tight_layout(); plt.show()\n"
+         "m.round(2)"),
+    md("**Takeaway:** the number of distinct archetypes traces an **inverted-U** — music *diversified* "
+       "from ~9 kinds (1920s) to ~21 (1970s–90s), then **consolidated to ~15 by the 2020s.** "
+       "Effective dimensionality rose then plateaued (~6 axes); overall radius drifted gently down. "
+       "Recent music isn't lower-dimensional — it **clumps into fewer archetypes** along the same axes."),
+    md("## Verdict\n"
+       "Two 'homogenization' questions, two answers:\n"
+       "- **Per feature:** spread drifts down modestly, with a step around 2000 (Steps 1–3).\n"
+       "- **In combination:** archetypes *rose* for most of the century, **peaked in the 1970s–90s, and "
+       "have fallen since ~2000** — fewer *kinds* of song in the streaming era, even though the number "
+       "of style-axes held steady.\n\n"
+       "So music didn't simply 'get more samey' — it diversified for decades, then began "
+       "**consolidating into fewer archetypes**. Caveat: dataset B's early decades are surviving / "
+       "curated catalog (which can *understate* old diversity), so the **post-1990 decline** — measured "
+       "on large, fresh catalogs — is the robust part of the story."),
+])
+
+# =============================================== 05 islands of popularity =====
+write("05_islands_of_popularity.ipynb", [
+    md("# 05 · Islands of popularity\n\n"
+       "**The question:** are hit songs scattered randomly through the space of possible sounds, or do "
+       "**popular songs cluster into 'islands'** — regions of acoustic space where music tends to catch "
+       "on? We work in the same 9-D feature space as notebook 01, colored now by `popularity` (0–100).\n\n"
+       "*Caveat:* Spotify `popularity` is a recent-ish snapshot, so it tilts toward contemporary "
+       "sounds. We read 'islands' as *acoustic* regions that are popular, not a claim about all time."),
+    code(BOOT + "\n"
+         "from sklearn.decomposition import PCA\n"
+         "from sklearn.neighbors import NearestNeighbors\n"
+         "from sklearn.cluster import KMeans\n"
+         "RNG = 42\n"
+         "a = load_genre()\n"
+         "# one row per track, keeping its highest observed popularity\n"
+         "uniq = a.sort_values('popularity').drop_duplicates('track_id', keep='last').reset_index(drop=True)\n"
+         "Xs = zscore(uniq)\n"
+         "pop = uniq['popularity'].to_numpy()\n"
+         "print(f'{len(uniq):,} unique tracks · mean popularity {pop.mean():.1f}')"),
+    md("## Step 1 — Hits are rare\n"
+       "Most songs score low; only a sliver are very popular. So 'islands' means: do those rare hits "
+       "sit together?"),
+    code("plt.figure(figsize=(11, 4.5))\n"
+         "sns.histplot(pop, bins=50, color='#8f2d56')\n"
+         "for p, lbl in [(np.percentile(pop,90),'90th pct'), (70,'popularity 70')]:\n"
+         "    plt.axvline(p, color='k', ls='--', lw=1); plt.text(p+1, plt.ylim()[1]*.9, lbl, fontsize=9)\n"
+         "plt.title('Distribution of track popularity (0–100)'); plt.xlabel('popularity')\n"
+         "plt.tight_layout(); plt.show()"),
+    md("## Step 2 — A popularity map of the sound-space\n"
+       "Project to 2-D (PCA) and hex-bin it, coloring each cell by the **mean popularity** of the songs "
+       "in it. Bright cells are acoustic neighborhoods where music tends to be popular — the islands."),
+    code("Z = PCA(n_components=2, random_state=RNG).fit_transform(Xs)\n"
+         "fig, ax = plt.subplots(1, 2, figsize=(15, 6))\n"
+         "ax[0].hexbin(Z[:,0], Z[:,1], gridsize=45, cmap='mako', bins='log')\n"
+         "ax[0].set_title('Where songs are (density)'); ax[0].set_xlabel('PC1'); ax[0].set_ylabel('PC2')\n"
+         "hb = ax[1].hexbin(Z[:,0], Z[:,1], C=pop, reduce_C_function=np.mean, gridsize=45,\n"
+         "                  cmap='inferno', mincnt=20)\n"
+         "ax[1].set_title('Mean popularity per region (the islands)'); ax[1].set_xlabel('PC1')\n"
+         "fig.colorbar(hb, ax=ax[1], label='mean popularity'); plt.tight_layout(); plt.show()"),
+    md("**Takeaway:** popularity is *not* uniform — some regions of sound-space glow far hotter than "
+       "others. Hits concentrate."),
+    md("## Step 3 — Do popular songs have popular neighbors?\n"
+       "If islands are real, a song's *acoustic* neighbors should be more popular than average when the "
+       "song itself is popular. We compare each sampled song's popularity to the mean popularity of its "
+       "10 nearest neighbors."),
+    code("nn = NearestNeighbors(n_neighbors=11).fit(Xs)\n"
+         "rng = np.random.default_rng(RNG)\n"
+         "q = rng.choice(len(Xs), size=6000, replace=False)\n"
+         "_, idx = nn.kneighbors(Xs[q])\n"
+         "nbr_pop = pop[idx[:,1:]].mean(1)\n"
+         "r = np.corrcoef(pop[q], nbr_pop)[0,1]\n"
+         "# neighbor popularity lift for the top-decile-popular songs\n"
+         "hi = pop[q] >= np.percentile(pop, 90)\n"
+         "print(f'corr(own popularity, neighbors\\' popularity) = {r:.2f}')\n"
+         "print(f'neighbors of a top-10%% song average {nbr_pop[hi].mean():.1f} popularity '\n"
+         "      f'vs {pop.mean():.1f} overall (lift {nbr_pop[hi].mean()/pop.mean():.1f}x)')\n"
+         "bins = pd.qcut(pop[q], 10, duplicates='drop')\n"
+         "grp = pd.DataFrame({'nbr': nbr_pop, 'bin': bins}).groupby('bin', observed=True)['nbr'].mean()\n"
+         "plt.figure(figsize=(10, 5))\n"
+         "plt.plot(range(len(grp)), grp.values, marker='o', color='#e4572e')\n"
+         "plt.axhline(pop.mean(), color='k', ls='--', label=f'overall mean {pop.mean():.0f}')\n"
+         "plt.xlabel('own popularity decile (low → high)'); plt.ylabel(\"neighbors' mean popularity\")\n"
+         "plt.title('Popular songs sit among popular songs'); plt.legend(); plt.tight_layout(); plt.show()"),
+    md("**Takeaway:** a clear positive relationship — the more popular a song, the more popular its "
+       "acoustic neighbors. Popularity is *spatially autocorrelated* in sound-space: islands, not noise."),
+    md("## Step 4 — Naming the islands (k-means)\n"
+       "Cluster the sound-space and rank clusters by mean popularity. The hottest clusters are the "
+       "'hit islands'; we tag each with its dominant genre and a chart-topping example."),
+    code("km = KMeans(n_clusters=12, n_init=10, random_state=RNG).fit(Xs)\n"
+         "uniq = uniq.assign(cluster=km.labels_)\n"
+         "prof = (uniq.groupby('cluster')\n"
+         "        .agg(mean_pop=('popularity','mean'), n=('popularity','size'),\n"
+         "             top_genre=('genre', lambda s: s.mode().iat[0]))\n"
+         "        .sort_values('mean_pop', ascending=False))\n"
+         "ex = uniq.loc[uniq.groupby('cluster')['popularity'].idxmax()].set_index('cluster')\n"
+         "prof['example'] = (ex['track_name'] + ' — ' + ex['artist_name']).reindex(prof.index)\n"
+         "plt.figure(figsize=(11, 5))\n"
+         "sns.barplot(x=prof.index.astype(str), y=prof['mean_pop'], order=prof.index.astype(str),\n"
+         "            hue=prof.index.astype(str), legend=False, palette='inferno')\n"
+         "plt.axhline(pop.mean(), color='k', ls='--', label=f'overall mean {pop.mean():.0f}')\n"
+         "plt.xlabel('acoustic cluster'); plt.ylabel('mean popularity')\n"
+         "plt.title('Some acoustic clusters are far more popular than others'); plt.legend()\n"
+         "plt.tight_layout(); plt.show()\n"
+         "prof[['mean_pop','n','top_genre','example']].round(1)"),
+    md("## Bonus — listen to a song's neighbors (feeds the app)\n"
+       "`track_id` is a Spotify ID, so we can link straight to each track. This is exactly the "
+       "'search a favorite → hear its acoustic neighbors' feature planned for the app."),
+    code("seed = uniq['popularity'].idxmax()\n"
+         "_, nbrs = nn.kneighbors(Xs[seed:seed+1], n_neighbors=8)\n"
+         "out = uniq.loc[nbrs[0][1:], ['track_name','artist_name','genre','popularity','track_id']].copy()\n"
+         "out['listen'] = 'https://open.spotify.com/track/' + out['track_id']\n"
+         "print('SEED:', uniq.loc[seed, ['track_name','artist_name']].to_dict())\n"
+         "out.drop(columns='track_id').reset_index(drop=True)"),
+    md("## Verdict\n"
+       "**Yes — popular songs form islands.** Popularity is unevenly spread across sound-space, a "
+       "song's acoustic neighbors track its own popularity, and a few k-means clusters are dramatically "
+       "hotter than the rest. There's an 'acoustic recipe' zone for hits — though remember popularity "
+       "is a recent snapshot, so these islands reflect *today's* winning sounds."),
+])
+
+print("\nAll notebooks written to", NB_DIR)
