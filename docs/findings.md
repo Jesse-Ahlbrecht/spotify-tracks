@@ -2,6 +2,11 @@
 
 Wide pass over all four realms. Numbers from `analysis/*.py`; figures in `analysis/figures/`.
 
+> **Data caveat (all time realms).** Dataset B's 1920s–40s are thin (~6.6% of tracks) *and*
+> unrepresentative — a survivorship/reissue sample (classical/jazz-heavy, a third with no genre tag)
+> on lo-fi mono transfers that inflate `acousticness` / deflate `energy`. Trend lines include them;
+> headline claims don't rest on them. Details in [decisions.md](decisions.md) → Open risks.
+
 ## Realm 1 — Are genres real?  (dataset A, 176.8k unique tracks, 26 genres)
 - **19.9%** of tracks carry 2+ genre labels (max 8) — genre boundaries are officially fuzzy.
 - Genre explains **~39%** of audio-feature variance on average (eta²): high for speechiness (0.72),
@@ -19,10 +24,32 @@ Wide pass over all four realms. Numbers from `analysis/*.py`; figures in `analys
 - Feature trends = clean "electrification" arc: acousticness/instrumentalness/speechiness collapse,
   energy/loudness/danceability rise, crossover ~1970–80.
 
-## Realm 3 — Mood over time  (dataset B)
-- **Energy** surges 0.30→0.66 (1920s→2020s); **valence** drifts down late (0.56→0.51, sharper post-2000);
-  danceability rises then plateaus. Visible valence/danceability dip around the 1940s (WWII).
-- Event annotations are suggestive, not causal. External misery-index overlay still TODO (extension).
+## Realm 3 — Mood over time  (dataset B) — *drilled in; mood as multiple axes*
+- **Mood is several near-independent dials, and they disagree.** `valence` and `mode` are ~uncorrelated
+  (r≈0.01), so tonality and positivity are *separate* stories tracked separately.
+- **Energy** surges 0.30→0.66 (1920s→2020s); **valence** sags (0.56→0.51, sharper post-2000).
+- **Tonality (new headline):** minor-key share climbs **26% → 45%** (corr 0.85 with year) — a cleaner
+  "darkening" trend than valence. Music is increasingly written in the "sad" tonality.
+- **The valence decline is driven by genres darkening, not by the mix.** Shift-share (Oaxaca)
+  decomposition of the 1960s→2010s change (Δ −0.044, ~98% of tracks via artist-genre join):
+  **within-genre −0.057**, between-genre (mix) **+0.020**, interaction −0.007. Valence fell *within*
+  almost every supergenre; the mix actually drifted slightly *brighter*, **masking** part of the
+  within-genre darkening (both mechanisms are real changes — the decomposition says which dominates).
+- **Supporting textures:** loudness war (−14.8→−7.3 dB), explicit lyrics 0.07%→23%, duration peaks
+  ~4 min then shrinks in the streaming 2020s (3.4 min).
+- **The "sad banger" (sadder *and* more intense together):** low-valence + high-energy tracks grew
+  ~1% (1920s) → **33%** (2020s). Energy⊥valence (decade corr ≈ 0) so they're separate trends: the
+  **energy** rise is an electrification story (decade corr(energy, loudness)=+0.97, acousticness=−1.00);
+  the **sadder** trend isn't the economy (see below) — likely genre/aesthetic + streaming + cultural
+  (hypotheses, notebook "Why & outlook"). Outlook: minor keys still climbing, energy plateauing.
+- **External overlays (FRED, no-auth) — music mood is its own trajectory.** Tested vs the *objective*
+  economy (misery index) and *perceived* conditions (U. Michigan consumer sentiment). Detrended,
+  valence↔misery is **not robust**: +0.31 over 1948–2021 but **~0 from 1960 on** — the signal is a
+  thin-catalog late-1940s artifact, so the earlier "escapism" read is **retracted**. Valence↔sentiment
+  ≈ −0.07 (no link either). What *is* real: a **perception–reality gap** in the human data (sentiment
+  runs below misery-implied levels in the mid-2000s/post-2008/2020s — people feeling worse than the
+  numbers say; corr(sentiment,−misery)=+0.66 overall). Music valence and sentiment both drift down
+  recently, but co-drift over ~70 noisy years ≠ linkage. Minor-key rise tracks neither → secular drift.
 
 ## Realm 4 — Converging to a formula?  (dataset B)
 - **Per feature:** per-year dispersion declines, with a **step-down around 2000** (~0.95 → ~0.86) — mild

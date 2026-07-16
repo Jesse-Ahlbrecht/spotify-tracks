@@ -86,3 +86,38 @@ static site consuming them (hostable as a link; keeps 232k/600k rows out of the 
 - Time-feature trends are often **monotonic drift** (production tech), not cycles — the fashion story
   may partly falsify; report it honestly ("mostly drifts, here's what recurs").
 - Mood-vs-decade is correlational, not causal.
+- **Early decades are thin *and* unrepresentative (affects all time realms 2–4).** The 1920s–40s are
+  only ~6.6% of dataset B (1920s 7.6k, 1930s 13k, 1940s 18k; 1922 has just 276 tracks) — but N is the
+  smaller issue. What survives on Spotify from that era is a **survivorship/reissue sample** (34.9%
+  have no artist genre tag; classical 16.6% + jazz 12.3% dominate vs ~2% each later; rock/pop barely
+  exist yet), not what listeners actually heard. And features are computed on **low-fidelity mono
+  transfers**, which mechanically inflates `acousticness` and deflates `energy`/`loudness` for
+  recording-tech reasons, not artistic ones. So: keep pre-1950 points in the trend lines (the 100-year
+  arc needs them), but **never anchor a headline number on the 1920s–40s alone.** Rigorous comparisons
+  should start ~1950–60 (the shift-share decomposition anchors at 1960s→2010s; the economics overlay
+  starts 1948 and drops years <200 tracks — the retracted "escapism" signal was exactly this bias
+  biting). Notebook 03 Step 1 flags the sparse/unrepresentative catalog inline.
+
+## 2026-07-16 — Realm 3 deep-dive (mood over time)
+
+Drilled into the richest thread. Reframed mood as **multiple near-independent axes** (valence, energy,
+tonality) rather than one dial, after finding `valence` ⟂ `mode` (r≈0.01).
+- **New signal — tonality:** added `mode` (major/minor); minor-key share rises 26%→45% (corr 0.85/yr).
+  Cleaner than valence and its own story.
+- **Rigor — genre decomposition:** shift-share (Oaxaca) of the 1960s→2010s valence change shows the
+  decline is **within-genre (−0.057)**, not a mix artifact (mix effect +0.020 actually masks it). This
+  needed a genre for dataset B, so we **resolved the earlier "avoid genre×B" call**: `attach_genre()`
+  joins each track's lead `id_artists` → artist `genres` (artists.csv) → coarse supergenre (~72% named
+  coverage). Honest about the uncovered ~28%.
+- **External data (committed to earlier):** `load_misery()` + `download_data.sh` now fetch US
+  unemployment (UNRATE) + CPI (CPIAUCNS→inflation) from **FRED's `fredgraph.csv`, no auth** — same
+  ethos as the Kaggle downloads. Later added **consumer sentiment (UMCSENT)** via `load_sentiment()`
+  to test *perceived* vs *objective* conditions (Jesse's point: people feel worse than reality lately).
+- **Escapism claim retracted (honesty fix).** The first pass reported a detrended valence↔misery
+  ~+0.31 ("brighter music in hard times"). A start-year robustness check shows it's **driven by the
+  volatile late-1940s / thin catalog** — ~0 from 1960 on. Music valence robustly tracks **neither**
+  the economy nor sentiment year-to-year. The perception–reality gap *does* show in the human data
+  (sentiment vs misery), and music valence + sentiment co-drift down recently, but that's not linkage.
+  Reframed Step 7 around this honest null; corrected findings.md. Minor-key rise tracks neither.
+- Also surfaced supporting textures (loudness war, explicit rise, streaming-era shortening).
+- Scope unchanged: still notebook-only for this realm; no app artifacts yet.

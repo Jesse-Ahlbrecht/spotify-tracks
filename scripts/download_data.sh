@@ -32,4 +32,21 @@ for slug in "${!DATASETS[@]}"; do
   echo "[ok  ] $(ls "$dest"/*.csv | wc -l) csv(s) in $dest"
 done
 
+# US economic series for the mood-over-time overlay (FRED, also no auth).
+# UNRATE  = civilian unemployment %, monthly 1948+
+# CPIAUCNS= CPI index, monthly 1913+ (-> YoY inflation gives the longest history)
+# UMCSENT = U. Michigan consumer sentiment (how people *feel*), monthly 1952+
+econ="$RAW_DIR/econ"
+mkdir -p "$econ"
+for id in UNRATE CPIAUCNS UMCSENT; do
+  out="$econ/$id.csv"
+  if [ -s "$out" ]; then echo "[skip] econ/$id.csv"; continue; fi
+  echo "[get ] FRED $id -> $out"
+  curl -sL -o "$out" "https://fred.stlouisfed.org/graph/fredgraph.csv?id=$id"
+  if ! head -1 "$out" | grep -qi "observation_date"; then
+    echo "[err ] FRED $id did not return a csv. First bytes:"; head -c120 "$out"; echo; exit 1
+  fi
+  echo "[ok  ] $(wc -l < "$out") rows in econ/$id.csv"
+done
+
 echo "Done. Raw data in $RAW_DIR"

@@ -13,7 +13,7 @@ App side-feature (planned): search a favourite song → hear its acoustic neighb
 ## Data — all download with NO Kaggle auth (`GET .../api/v1/datasets/download/<slug>` → zip)
 - A `zaheenhamidani/ultimate-spotify-tracks-db` — ~232k, genre + audio features, **no year**. (Realm 1)
 - B `yamaerenay/spotify-dataset-19212020-600k-tracks` — ~600k, **has `year`** + features. (Realms 2–4)
-- misery-index-by-year + events: small hand-curated CSV in repo. (Realm 3)
+- US econ + sentiment (unemployment, inflation, consumer sentiment): fetched no-auth from FRED by `download_data.sh`. (Realm 3)
 Raw data is git-ignored; fetch via `scripts/download_data.sh`.
 
 ## Architecture
