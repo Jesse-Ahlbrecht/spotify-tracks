@@ -121,3 +121,28 @@ tonality) rather than one dial, after finding `valence` ⟂ `mode` (r≈0.01).
   Reframed Step 7 around this honest null; corrected findings.md. Minor-key rise tracks neither.
 - Also surfaced supporting textures (loudness war, explicit rise, streaming-era shortening).
 - Scope unchanged: still notebook-only for this realm; no app artifacts yet.
+
+## 2026-07-16 — The app, Phase 1: "The Sound of Time" (guided journey)
+
+Committed to Realm 3 as the story and built the single polished deliverable: a scroll-driven
+"music journey over time" (`app/`). Flow agreed with Jesse: **hybrid guided→explore**, **Spotify
+embeds**, opening on a *question* ("Music from the 1920s is different — but how?"), featuring
+valence/energy/danceability + tonality, and keeping the "sad banger" as the emotional centrepiece.
+
+- **Phase 1 = the guided journey (beats 1–6)**, shippable on its own. Phase 2 (free explore + song
+  search) deferred — it needs a popularity-stratified searchable subset export.
+- **Architecture as planned:** Python computes → `scripts/export_app_data.py` writes ~9 KB of JSON
+  (`app/public/data/{timeline,tracks,world}.json`) from the *same* `common.py` loaders, so app
+  numbers match the notebook exactly. *All* derivation (aggregates, representative-track selection,
+  the economy join + z-scoring) happens in the export; React only reads + renders. The 587k-row
+  dataset never hits the browser.
+- **Stack:** Vite + React (plain JSX); charts hand-rolled in SVG with `d3-scale`/`d3-shape` (no chart
+  lib). Followed the `dataviz` skill — validated the categorical palette with its script, and used
+  **one axis** for the economy beat (z-scored valence/misery/sentiment) rather than a dual-axis.
+- **Representative track per decade** = most-popular track nearest the decade's mood centroid (so the
+  embed *sounds* like the dot). Surfaced fitting picks (Take Five → … → Juice WRLD).
+- **Env:** devcontainer had no Node; installed via nvm (Node 24 LTS). Verified end-to-end by driving a
+  headless Chromium (Playwright) and screenshotting every beat in light + dark (0 console errors);
+  removed Playwright + the driver afterward to keep app deps to react/d3/vite only.
+- Honesty carried into the app: the closing beat states music tracks neither the economy nor
+  sentiment, and the footer flags the "why" as hypotheses, not this dataset's answer.
