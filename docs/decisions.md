@@ -273,7 +273,7 @@ offset matches. The mobile hero was trimmed (type, padding) from ~900px to ~740p
 still falls just below a 700px fold, because the lede runs four sentences. Shortening that is a copy
 call, not a layout one, so it is left alone and asserted as "headline + tabs above the fold".
 
-**Verification: `app/scripts/check-scroll.mjs` (`npm run check:scroll`).** 23 Playwright checks over
+**Verification: `app/scripts/check-scroll.mjs` (`npm run check:scroll`).** 38 Playwright checks over
 desktop 1512×982 and mobile 390×700, driving real wheel events and real touch drags so the browser's
 own scroll pipeline is what's exercised. Every dead end above is now a named regression guard: the
 gesture is not fought while it runs, slow notches advance instead of pinning, `preventDefault` is
@@ -407,3 +407,119 @@ animation was on the element itself, so as a click target it moved under the poi
 Playwright refused to click it ("element is not stable") and anyone aiming at it would have had the
 same fight. The animation now lives on an inner `.cue-arrow` span, so the pill is stationary and the
 arrow still bobs.
+
+## 2026-08-23 — Decade arrows: a way through the century that isn't scrolling
+
+Jesse: "the scrolling does not always work well — can we add arrows to scroll through the decades?"
+Fair. Even with the hijacker gone, wheel and trackpad behaviour varies by device, and until now
+scrolling was the *only* way to advance a decade. There was no click affordance anywhere in the
+journey.
+
+What shipped is `DecadeArrows.jsx`: two chevrons fixed to the right margin, vertically centred,
+stepping one **section** per press. Not just decades — the page flattens into one ladder (landing
+screen → explainer → a rung per decade), so holding ↑ walks all the way back out to the top instead
+of dead-ending on the 1920s. The arrows show over the explainer and the journey, and stand down on
+the landing screen (its own cue takes over) and past the end of the journey (where "jump to top"
+does). Which rung you are on comes from `useSectionAtLine('.hero, .journey-intro, .journey')`, and
+inside the journey from `useActiveStep` as before.
+
+**It took four passes to get there, and every one of them removed something.** The first attempt was
+a full decade rail — a pill-shaped card of eleven tick marks with the active year labelled, on the
+theory that a rail doubles as a position indicator in a way bare arrows cannot. Jesse stripped the
+card, then the pill around the year, then reduced it to a line with a single dot that unfolded the
+whole century on hover, then cut the timeline entirely. The reasoning that survives: this control
+sits on screen for the entire journey, and the plane already shows you where in the century you are.
+A second position indicator in the margin was answering a question nothing was asking, and each
+version of it cost real caption width — the rail's gutter peaked at **152px** of `padding-right`
+below 1430px, against **74px** below 1280px for the arrows alone. The chevrons are drawn as SVG
+rather than typed as ↑/↓ because the glyphs carry a font's own weight and terminals and never quite
+match at 34px.
+
+Worth recording as a process note, not just a design one: the rail was *fully built and green on 42
+checks* before it was cut. Nothing was wrong with it. It was simply more than the question needed,
+and the only way that became obvious was seeing it on screen.
+
+**It never owns the current decade.** The arrows scroll and let `useActiveStep`'s
+IntersectionObserver follow, exactly as a wheel gesture would. There is no second source of truth,
+so the control, the plane and the captions cannot drift apart. `active` is read only to pick the
+target and to decide when an arrow is disabled.
+
+**Reuse, not reinvention.** A press is `scrollToReadingLine('.step', i)` — the same function "Dive
+in" uses, which already knows the reading line is 0.5 desktop / 0.81 mobile and already omits
+`behavior` so the reduced-motion override wins. It gained one optional index argument. Nothing new
+knows how to scroll.
+
+**The race that was real, and the one that wasn't.** A press arms `useSettleToStep`'s idle timer
+like any other scroll, but that turns out to be harmless: the settle recomputes its target from the
+same `readingLineY()` the press used, so `glide()` returns early on a <2px distance. Measured —
+5427 → 5427. The genuine bug was the other direction: for up to ~620ms after any gesture ends a
+settle glide may be in flight, and its rAF loop rewrites the scroll position every frame from a
+`start` captured *before* the press. Left alone it silently swallowed the step — the worst failure
+shape for a control whose users are already fighting the scroll. Fixed by having the settler listen
+for a `SETTLE_CANCEL` event beside the `wheel` and `touchstart` listeners it already has, dispatched
+by `scrollToReadingLine` — the invariant is "a deliberate jump outranks a settle in progress", so it
+belongs on the jump, not on the arrows. The handler abandons the whole cycle (`clearTimeout(timer);
+stop(); from = null`), not just the rAF: a jump teleports the page, so a timer still armed from
+before it would wake up and reason about a `from`/`y` pair straddling the teleport. Rejected:
+binding the existing `stop()` to `pointerdown`, which would freeze a glide on any click (a Spotify
+play button included) and miss keyboard activation entirely.
+
+**`aria-disabled`, not `disabled` — and this one is load-bearing.** A press starts a smooth scroll;
+the rung changes as the page travels; setting the real `disabled` attribute on the button the reader
+just clicked **cancels that scroll dead**. Measured: the climb from the explainer to the landing
+screen stopped at 371px instead of 0, every time, at exactly the moment the hero entered the reading
+band and the up arrow went inert. It took four probes to pin down, because setting `disabled` on a
+*programmatically* focused button does not do this — only on one the user actually clicked. So the
+ends are marked with `aria-disabled` and the handler no-ops, which says the same thing to assistive
+tech without taking focus away mid-jump.
+
+**Geometry.** The page's right gutter is `24 + max(0, (W − 1180) / 2)`; the arrows reach
+`--arrow-size + --arrow-inset` in and want a little slack past that. At 1512px there is 190px, so
+nothing fires — which is exactly why the check also runs at 1200px, where the `901–1280px` rule has
+to earn its keep. Both gutters are `calc()`d from those two custom properties rather than
+hand-evaluated, so resizing a chevron cannot leave a stale number in a different section; mobile
+overrides the properties and the gutters follow. Measured 6px of clearance at 390px.
+
+14 new checks (41 total, all green), including both races as named assertions and a re-read of the
+`preventDefault` counter *after* all arrow interaction — the original probe ran before the control
+existed. Flagged and not built: `.to-top` has the same latent "invisible but still tabbable" issue
+the arrows' `visibility` toggle fixes; and a ≥100ms main-thread stall mid-step could still let the
+settler land an intermediate decade (recoverable by pressing again, so no guard was pre-built).
+
+Two test flakes fixed rather than tolerated. `no console/page errors (desktop)` failed about one run
+in three on a CORS error from Spotify's *own* Sentry reporting inside the embed iframe; the console
+listener now filters by origin, so our bundle's errors still land and the iframe's do not. And "an
+arrow click outranks a settle glide" originally asserted a specific decade, which is not
+well-defined — `active` can advance between the gesture and the press. It now asserts the sign of
+travel (the glide was heading forward; if the press wins the page must end up behind where it was
+pressed, and on a decade), which is what the check actually means. Verified load-bearing by removing
+the `SETTLE_CANCEL` listener: the page ends at 3659 instead of 3070.
+
+A `/simplify` pass then folded the feature's one-off `useOnScreen` hook back into `useInView` as a
+`once: false` option (the two differed by one branch), moved the arrows onto the ref `useInView`
+already returns instead of reaching up at their own ancestor with `document.querySelector`, reverted
+`scrollToReadingLine` to its original one-argument form (the caller addresses a step with
+`.step[data-step="i"]`, the same index channel `useActiveStep` reads back, rather than widening a
+shared primitive for one call site), and dropped a clamp that the end guards already made
+unreachable.
+
+Then the deferred items from that pass were cleared too:
+- **`toTop` / `toIntro` had the same swallowed-jump bug** the arrows had just fixed. Both now live in
+  `lib.js` beside `scrollToReadingLine` and cancel a settle first, so the rule is a property of
+  jumping rather than something each caller remembers. The page arrows reuse them for the top two
+  rungs, which is what made the ladder cheap to build.
+- **`.to-top` toggles `visibility`** as well as opacity — it was invisible but still a tab stop.
+- **`settle()` in the check script waits for a condition instead of sleeping a guess.** It polls per
+  frame for the scroll to hold still, with the stillness window (180ms) deliberately longer than
+  `useSettleToStep`'s 100ms `IDLE` — shorter and it would return in the gap *before* the settle
+  glide starts, and every measurement downstream would be taken at the wrong moment. A 260ms lead-in
+  comes first for the same class of reason: a click-triggered smooth scroll takes a frame or two to
+  begin, so polling immediately sees "not moving" and returns before it ever moved. Both traps were
+  found by breaking the suite, not by reasoning. Result: 47 waits, 27.4s, **zero cap hits** — down
+  from ~39s of blind sleeping, and no per-call magic numbers left to drift. The `goToStep` + `settle`
+  pair that opened eleven checks is now `park()`.
+
+**AI disclosure:** the control, the CSS, the settle-cancel fix and the new checks are
+Claude-generated from Jesse's brief and successive design cuts, reviewed by Jesse. The `activeDecade`
+test helper shipped broken first (`Number("1920s")` → NaN) and was caught by six red checks, not by
+reading.

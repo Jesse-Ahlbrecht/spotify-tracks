@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react'
-import { useData, useSettleToStep, JOURNEYS, VAR_INFO } from './lib.js'
+import {
+  useData,
+  useSettleToStep,
+  scrollToIntro as toIntro,
+  scrollToTop as toTop,
+  JOURNEYS,
+  VAR_INFO,
+} from './lib.js'
 import Journey from './components/Journey.jsx'
 import JourneyIntro from './components/JourneyIntro.jsx'
 import Beat from './components/Beat.jsx'
 import { WorldChart } from './charts/WorldChart.jsx'
-
-const toTop = () => window.scrollTo({ top: 0, behavior: 'smooth' })
-// Down to the selected story's explainer — the hero's cue and the tab switcher share this hop.
-// No `behavior` on purpose: omitting it defers to CSS scroll-behavior, which the
-// prefers-reduced-motion query already flips to `auto` for us.
-const toIntro = () => document.querySelector('.journey-intro')?.scrollIntoView({ block: 'start' })
 
 export default function App() {
   const data = useData()

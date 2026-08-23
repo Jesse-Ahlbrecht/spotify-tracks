@@ -41,14 +41,38 @@ const readingLineY = (el) => {
   return Math.round(r.top + window.scrollY + r.height / 2 - window.innerHeight * readingLine(isMobile()))
 }
 
+// A deliberate jump outranks a settle in progress. useSettleToStep listens for this the same way it
+// listens for wheel and touchstart — a glide rewrites the scroll position every frame from a `start`
+// captured before the jump, so left alone it would silently drag the page back off it.
+export const SETTLE_CANCEL = 'settle-cancel'
+const cancelSettle = () => dispatchEvent(new Event(SETTLE_CANCEL))
+
+// ---- the page's jumps -----------------------------------------------------
+// All three live here so the cancel-a-settle rule is a property of jumping, not something each
+// caller has to remember. Most omit `behavior` on purpose: that defers to CSS scroll-behavior,
+// which the prefers-reduced-motion query already flips to `auto` for us.
+
 // Scroll the first `sel` onto the reading line. Computing the target beats
 // `scrollIntoView({block:'center'})`, which only ever centres — matching it on mobile used to take
 // a document-wide `scroll-padding-top`, and every non-decade scroll target then had to cancel it.
-// No `behavior`: omitting it defers to CSS scroll-behavior, which the prefers-reduced-motion query
-// already flips to `auto` for us. Same reason the plain scrollIntoView callers omit it.
 export function scrollToReadingLine(sel) {
   const el = document.querySelector(sel)
-  if (el) window.scrollTo({ top: readingLineY(el) })
+  if (!el) return
+  cancelSettle()
+  window.scrollTo({ top: readingLineY(el) })
+}
+
+// The landing screen. `smooth` is explicit here because this one is often a long way up, and the
+// jump reads as a journey back rather than a teleport.
+export function scrollToTop() {
+  cancelSettle()
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+// The selected story's explainer. Its top edge, not its middle: it is a screen, not a decade.
+export function scrollToIntro() {
+  cancelSettle()
+  document.querySelector('.journey-intro')?.scrollIntoView({ block: 'start' })
 }
 
 export function useActiveStep(count) {
@@ -77,6 +101,48 @@ export function useActiveStep(count) {
     }
   }, [count])
   return [active, (i) => (el) => (refs.current[i] = el)]
+}
+
+// ---- which landmark is at the reading line? -------------------------------
+// Returns an index into `selector`'s matches, or -1 when none of them is — which is what tells the
+// page arrows to stand down past the end of the journey. Same band as useActiveStep, so "the
+// section you are reading" means one thing on this page.
+// Selector-based rather than ref-based (the choice useInView makes) because the landmarks are owned
+// by three different components — the hero by App, the explainer by JourneyIntro, the journey by
+// Journey — and threading refs out of all three to a control none of them owns is worse than one
+// query. Overlap at a boundary resolves to the earlier match, so a section stays current until it
+// has fully left the band.
+export function useSectionAtLine(selector) {
+  const [at, setAt] = useState(-1)
+  useEffect(() => {
+    const mql = window.matchMedia(MOBILE)
+    const on = new Set()
+    let obs
+    const observe = () => {
+      obs?.disconnect()
+      on.clear()
+      const els = [...document.querySelectorAll(selector)]
+      obs = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((e) => {
+            const i = els.indexOf(e.target)
+            if (e.isIntersecting) on.add(i)
+            else on.delete(i)
+          })
+          setAt(on.size ? Math.min(...on) : -1)
+        },
+        { rootMargin: stepBand(mql.matches), threshold: 0 },
+      )
+      els.forEach((el) => obs.observe(el))
+    }
+    observe()
+    mql.addEventListener('change', observe)
+    return () => {
+      mql.removeEventListener('change', observe)
+      obs.disconnect()
+    }
+  }, [selector])
+  return at
 }
 
 // ---- settle onto a decade once scrolling stops ----------------------------
@@ -128,6 +194,16 @@ export function useSettleToStep(selector) {
     const stop = () => {
       cancelAnimationFrame(raf)
       raf = null
+    }
+
+    // Abandon the whole settle cycle, not just the glide: a deliberate jump teleports the page, so
+    // a timer still armed from before it would wake up and reason about a `from`/`y` pair that
+    // straddles the jump. Stopping the rAF alone would leave that to be caught downstream by
+    // glide()'s 2px early-out, which is a guard, not an intention.
+    const abort = () => {
+      clearTimeout(timer)
+      stop()
+      from = null
     }
 
     // Scroll positions at which each step sits on the reading line. Re-queried per settle rather
@@ -193,12 +269,13 @@ export function useSettleToStep(selector) {
     addEventListener('scroll', onScroll, { passive: true })
     addEventListener('wheel', stop, { passive: true })
     addEventListener('touchstart', stop, { passive: true })
+    addEventListener(SETTLE_CANCEL, abort)
     return () => {
-      clearTimeout(timer)
-      stop()
+      abort()
       removeEventListener('scroll', onScroll)
       removeEventListener('wheel', stop)
       removeEventListener('touchstart', stop)
+      removeEventListener(SETTLE_CANCEL, abort)
     }
   }, [selector])
 }
@@ -237,19 +314,19 @@ export function useDebounced(value, delay = 140) {
   return settled
 }
 
-// ---- reveal-on-scroll for the standalone beats ----------------------------
-export function useInView(options = { rootMargin: '-15% 0px -15% 0px' }) {
+// ---- is the referenced element on screen? ---------------------------------
+// `once: true` (the default) is the reveal the standalone beats use: latch on first sight, then stop
+// observing. `once: false` keeps toggling, for chrome that may float over only one section.
+export function useInView({ once = true, ...io } = { rootMargin: '-15% 0px -15% 0px' }) {
   const ref = useRef(null)
   const [seen, setSeen] = useState(false)
   useEffect(() => {
     const el = ref.current
     if (!el) return
-    const obs = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting) {
-        setSeen(true)
-        obs.disconnect()
-      }
-    }, options)
+    const obs = new IntersectionObserver(([e]) => {
+      setSeen(e.isIntersecting)
+      if (e.isIntersecting && once) obs.disconnect()
+    }, io)
     obs.observe(el)
     return () => obs.disconnect()
   }, [])

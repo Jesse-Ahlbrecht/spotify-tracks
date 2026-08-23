@@ -1,4 +1,5 @@
 import { useActiveStep, useDebounced, useSizeVar, VAR_INFO } from '../lib.js'
+import DecadeArrows from './DecadeArrows.jsx'
 import MoodSpace from './MoodSpace.jsx'
 import TrackEmbed from './TrackEmbed.jsx'
 
@@ -22,6 +23,10 @@ export default function Journey({ decades, tracks, journey }) {
 
   return (
     <section className="journey" aria-label="The journey through the decades">
+      {/* Fixed-position, so not a grid item — it adds no column and no gutter. First in the DOM so
+          a keyboard reader meets the step-a-section control before the column it navigates. */}
+      <DecadeArrows count={decades.length} active={active} />
+
       <div className="journey-graphic">
         <MoodSpace
           decades={decades}

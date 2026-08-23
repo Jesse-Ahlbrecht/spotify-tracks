@@ -22,6 +22,10 @@
   /* Height of the sticky topbar. Full-height sections sit BELOW it, so `100dvh` overshoots the
      visible area by exactly this much — subtract it or their last line falls under the fold. */
   --topbar: 72px;
+  /* Size and edge offset of the fixed decade arrows. Here rather than on .decade-arrows because
+     the journey's right gutter is derived from them, and a child cannot publish upwards. */
+  --arrow-size: 48px;
+  --arrow-inset: 14px;
 }
 
 * { box-sizing: border-box; }
@@ -181,10 +185,70 @@ em { font-style: normal; color: var(--accent); transition: color 0.3s ease; }
   opacity: 0;
   transform: translateY(8px);
   pointer-events: none;
-  transition: opacity 0.3s ease, transform 0.3s ease, color 0.2s ease, border-color 0.2s ease;
+  /* `visibility` as well as opacity, same as .decade-arrows: without it the button is invisible
+     but still a tab stop on every screen it is faded out on. */
+  visibility: hidden;
+  transition: opacity 0.3s ease, transform 0.3s ease, color 0.2s ease, border-color 0.2s ease,
+    visibility 0s linear 0.3s;
 }
-.to-top.show { opacity: 1; transform: none; pointer-events: auto; }
+.to-top.show {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+  visibility: visible;
+  transition-delay: 0s;
+}
 .to-top:hover { color: var(--accent); border-color: var(--accent); }
+
+/* ---- decade arrows (fixed, right edge; step a decade without scrolling) ---- */
+/* Two chevrons in the margin and nothing else — no card, no pill, no backdrop. This sits on screen
+   for the whole journey, so the only ink it earns is the two marks you press. Fixed, so it is
+   outside flow and cannot touch the journey grid, --embed-h or --caption-lift. Fades in only over
+   the journey, toggling `visibility` as well as opacity — or both buttons stay in the tab order on
+   the hero and the footer. `translate`, not `transform`, for the same reason as .step-inner. */
+.decade-arrows {
+  position: fixed;
+  right: var(--arrow-inset);
+  top: 50%;
+  translate: 0 -50%;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0s linear 0.3s;
+}
+.decade-arrows.show { opacity: 1; visibility: visible; transition-delay: 0s; }
+
+/* 48px of hit target around a 34px mark. The pill radius is so the UA focus ring comes out round
+   rather than a square floating over the caption column — nothing else here overrides the ring. */
+.decade-arrow {
+  display: grid;
+  place-items: center;
+  width: var(--arrow-size);
+  height: var(--arrow-size);
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: color 0.2s ease, opacity 0.2s ease;
+}
+/* aria-disabled, not :disabled — see the note in DecadeArrows.jsx: the real attribute kills the
+   in-flight smooth scroll the press just started. */
+.decade-arrow[aria-disabled='true'] { opacity: 0.22; cursor: default; }
+.decade-arrow:not([aria-disabled='true']):hover { color: var(--accent); }
+.decade-arrow svg {
+  width: calc(var(--arrow-size) * 0.71);
+  height: calc(var(--arrow-size) * 0.71);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 
 /* ---- journey intro (the explainer screen that opens each story) ---- */
 /* Sits above the step column, so useSettleToStep leaves it alone and it scrolls freely. */
@@ -366,17 +430,35 @@ figcaption { margin-top: 10px; color: var(--ink-2); font-size: 0.9rem; max-width
 .credits { font-size: 0.85rem; color: var(--muted); margin-top: 1.2em; }
 
 /* ---- responsive ---- */
+/* The page's own right gutter is `24 + max(0, (W - 1180) / 2)`; the arrows reach
+   `--arrow-size + --arrow-inset` in and want a little slack past that. From ~1272px up the leftover
+   alone clears them (190px at 1512px, so nothing fires there); below that the column gives up the
+   width. A static gutter, not a reflow — nothing here ever moves in response to hover or to which
+   decade is active. The 1280px bound has to stay a literal: media queries cannot test a custom
+   property. 901px is the `MOBILE` breakpoint from lib.js — keep the two in step. */
+@media (min-width: 901px) and (max-width: 1280px) {
+  /* The explainer too: the arrows float over it as well, so its prose needs the same clearance.
+     Its own 860px cap already covers it above ~950px, but folding it into this rule beats a third
+     breakpoint — the cost is the text block sitting ~25px left of centre, which does not read. */
+  .journey,
+  .journey-intro { padding-right: calc(var(--arrow-size) + var(--arrow-inset) + 12px); }
+}
+
 /* Mobile turns the two-column layout into a stack: the graphic pins across the top, captions
    scroll underneath it. That only reads if the graphic leaves room — unconstrained, the plane
    plus three Spotify players fill a phone screen entirely and no caption is ever visible. So the
    plane is capped (below) and the caption band gets the rest. */
 @media (max-width: 900px) {
-  .journey { display: block; padding: 0 16px; }
+  /* The asymmetric padding is the caption column's clearance for the decade arrows, derived from
+     their size the same way the desktop gutter is. */
+  .journey { display: block; padding: 0 calc(var(--arrow-size) + var(--arrow-inset) + 6px) 0 16px; }
   /* Compact topbar so the brand and tagline each stay on one line — wrapped to two it grew to
      ~90px, overflowing the sticky offset below and clipping the plane's top edge. */
   .topbar { padding: 12px 16px; }
-  /* Keeps the full-height sections' `100dvh − topbar` honest against the compact bar above. */
-  :root { --topbar: 52px; }
+  /* Keeps the full-height sections' `100dvh − topbar` honest against the compact bar above.
+     Smaller arrows tucked closer to the edge: phone width is the scarce resource here, and the
+     gutter above tracks these two automatically. */
+  :root { --topbar: 52px; --arrow-size: 42px; --arrow-inset: 6px; }
   .brand { font-size: 1.05rem; }
   .topbar-sub { font-size: 0.8rem; }
   .journey-graphic {
@@ -414,7 +496,10 @@ figcaption { margin-top: 10px; color: var(--ink-2); font-size: 0.9rem; max-width
   /* Top-aligned, not centred: centring a screen-tall block puts its first line behind the
      sticky topbar even after the min-height correction. The rest of this block is a budget —
      the dive-in button is the point of the screen and has to stay reachable on a 700px phone. */
-  .journey-intro { justify-content: flex-start; padding: calc(var(--topbar) + 8px) 20px 3vh; }
+  .journey-intro {
+    justify-content: flex-start;
+    padding: calc(var(--topbar) + 8px) calc(var(--arrow-size) + var(--arrow-inset) + 6px) 3vh 20px;
+  }
   .journey-intro h2 { font-size: clamp(1.6rem, 6.5vw, 2.2rem); margin: 0.2em 0; }
   .intro-dials { margin: 1.2rem 0; gap: 10px; }
   .dial { padding: 12px 14px; }
