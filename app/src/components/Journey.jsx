@@ -1,4 +1,4 @@
-import { useActiveStep, useDebounced, VAR_INFO } from '../lib.js'
+import { useActiveStep, useDebounced, useSizeVar, VAR_INFO } from '../lib.js'
 import MoodSpace from './MoodSpace.jsx'
 import TrackEmbed from './TrackEmbed.jsx'
 
@@ -11,6 +11,9 @@ export default function Journey({ decades, tracks, journey }) {
   // Plane + captions follow scroll instantly; the visible embed swaps once scrolling
   // settles, so a fast scroll doesn't thrash which players are shown.
   const settled = useDebounced(active)
+  // Publishes the player stack's height as --embed-h, which lets the captions centre on the plane
+  // rather than the viewport (see .step-inner in index.css).
+  const stackRef = useSizeVar('--embed-h', '.journey')
 
   // Mount the settled decade's players alongside its neighbours. All stay loaded and painted
   // (the .embed-stack cross-fade only toggles opacity), so neighbours preload while you read
@@ -30,7 +33,7 @@ export default function Journey({ decades, tracks, journey }) {
           sizeKey={journey.sizeKey}
           accent={VAR_INFO[journey.y].color}
         />
-        <div className="embed-stack">
+        <div className="embed-stack" ref={stackRef}>
           {windowIdx.map((i) => (
             <TrackEmbed
               key={i}

@@ -21,23 +21,193 @@ export function useData() {
   return data
 }
 
-// ---- scrollytelling: which step is at the viewport centre -----------------
+// ---- scrollytelling: which step is at the "reading line" ------------------
+// The reading line is where a decade comes to rest, as a fraction of viewport height: centred on
+// desktop, lower on mobile where the sticky plane covers the top of the screen. Both consumers
+// derive from it — the observer band below, and the settle target in useSettleToStep — so they
+// cannot drift apart. CSS needs the same number: `scroll-padding-top` in the <900px query is
+// `2 * line - 100`, which is where 62dvh comes from.
+const MOBILE = '(max-width: 900px)' // must match the layout switch in index.css
+const BAND = 6 // half-height of the active band, in % of viewport
+const readingLine = (mobile) => (mobile ? 0.81 : 0.5)
+const stepBand = (mobile) => {
+  const line = readingLine(mobile) * 100
+  return `-${line - BAND}% 0px -${100 - line - BAND}% 0px`
+}
+
 export function useActiveStep(count) {
   const [active, setActive] = useState(0)
   const refs = useRef([])
   useEffect(() => {
-    const obs = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((e) => {
-          if (e.isIntersecting) setActive(Number(e.target.dataset.step))
-        })
-      },
-      { rootMargin: '-45% 0px -45% 0px', threshold: 0 },
-    )
-    refs.current.forEach((el) => el && obs.observe(el))
-    return () => obs.disconnect()
+    const mql = window.matchMedia(MOBILE)
+    let obs
+    const observe = () => {
+      obs?.disconnect()
+      obs = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((e) => {
+            if (e.isIntersecting) setActive(Number(e.target.dataset.step))
+          })
+        },
+        { rootMargin: stepBand(mql.matches), threshold: 0 },
+      )
+      refs.current.forEach((el) => el && obs.observe(el))
+    }
+    observe()
+    mql.addEventListener('change', observe) // rotating a phone can cross the breakpoint
+    return () => {
+      mql.removeEventListener('change', observe)
+      obs.disconnect()
+    }
   }, [count])
   return [active, (i) => (el) => (refs.current[i] = el)]
+}
+
+// ---- settle onto a decade once scrolling stops ----------------------------
+// Deliberately NOT a wheel hijacker: every listener is passive and nothing calls preventDefault,
+// so input is never intercepted and momentum is never swallowed. It wakes only once scrolling has
+// gone quiet, then glides to a decade; fresh input cancels it. Why not CSS scroll-snap, and why
+// the direction-of-travel rule: docs/decisions.md, 2026-08-23.
+const IDLE = 100 // ...but only 40ms once the page is already crawling: the momentum is spent by
+const IDLE_CRAWL = 40 // then, so waiting out a delay sized for a fast flick just reads as lag.
+const CRAWL = 9 // px per scroll event that counts as "momentum is spent"
+const PARKED = 12 // within this of a decade counts as already sitting on it
+const MIN_TRAVEL = 70 // a gesture smaller than this, while parked, is a nudge — leave it be
+const MAX_JUMP = 1.15 // steps are min-height, so a long caption can stretch one past the norm
+const EDGE = 60 // slack past the first/last decade, after which scrolling is fully native
+
+// Quadratic, not cubic: cubic's ease-in is so slow that the opening frames move sub-pixel, which
+// reads as dead time. Not `behavior: 'smooth'` either — its curve starts at full speed, so coming
+// off a standstill it lurches.
+const easeInOut = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2)
+
+export function useSettleToStep(selector) {
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const mql = window.matchMedia(MOBILE)
+    let timer = null
+    let raf = null // non-null iff a glide is in flight
+    let lastY = window.scrollY
+    let from = null // scroll position where the current gesture began
+
+    // Eased glide to an absolute Y. Writes with behavior:'instant' so each frame lands exactly
+    // where asked — the global `scroll-behavior: smooth` would re-animate every frame otherwise.
+    const glide = (to) => {
+      const start = window.scrollY
+      const dist = to - start
+      if (Math.abs(dist) < 2) return
+      // Short corrections stay brisk, long ones get room to breathe.
+      const dur = Math.min(520, Math.max(200, Math.abs(dist) * 0.66))
+      let t0 = null
+      const frame = (ts) => {
+        if (t0 === null) t0 = ts
+        const p = Math.min(1, (ts - t0) / dur)
+        window.scrollTo({ top: start + dist * easeInOut(p), behavior: 'instant' })
+        raf = p < 1 ? requestAnimationFrame(frame) : null
+      }
+      raf = requestAnimationFrame(frame)
+    }
+
+    // Fresh input outranks a glide in flight. Chrome cancels its own smooth scrolls on user input,
+    // but a rAF loop has to be stopped by hand or it would fight the reader.
+    const stop = () => {
+      cancelAnimationFrame(raf)
+      raf = null
+    }
+
+    // Scroll positions at which each step sits on the reading line. Re-queried per settle rather
+    // than cached: step geometry moves on resize, breakpoint cross, font load and journey switch,
+    // and this only runs when the page is already quiescent.
+    const targets = () => {
+      const line = window.innerHeight * readingLine(mql.matches)
+      const y = window.scrollY
+      return [...document.querySelectorAll(selector)].map((el) => {
+        const r = el.getBoundingClientRect()
+        return Math.round(r.top + y + r.height / 2 - line)
+      })
+    }
+
+    const settle = () => {
+      const T = targets()
+      if (T.length < 2) return
+      const y = window.scrollY
+      // Outside the journey (hero above, coda/footer below) scrolling is left alone.
+      if (y < T[0] - EDGE || y > T[T.length - 1] + EDGE) return
+
+      const travelled = y - from
+      const nearest = T.reduce((a, t) => (Math.abs(t - y) < Math.abs(a - y) ? t : a))
+
+      // "Leave a small nudge alone" keys off whether the reader is parked on a decade, not off how
+      // far they travelled — a distance test strands anyone who interrupts a glide.
+      if (Math.abs(nearest - y) < PARKED && Math.abs(travelled) < MIN_TRAVEL) return
+
+      let best
+      if (Math.abs(travelled) < 4) {
+        best = nearest // stranded with no direction to infer — just tidy up
+      } else {
+        // Direction of travel only. Rounding to the plain nearest decade is a trap: one mouse
+        // notch is ~100px against ~589px spacing, so "nearest" is always the one you just left.
+        const ahead = T.filter((t) => (travelled > 0 ? t > from + 4 : t < from - 4))
+        if (!ahead.length) return // nothing further that way — let the reader out
+        best = ahead.reduce((a, t) => (Math.abs(t - y) < Math.abs(a - y) ? t : a))
+      }
+      if (Math.abs(best - y) > Math.abs(T[1] - T[0]) * MAX_JUMP) return
+
+      glide(best)
+    }
+
+    const onIdle = () => {
+      settle()
+      from = null
+    }
+
+    const onScroll = () => {
+      const y = window.scrollY
+      if (raf !== null) {
+        lastY = y // a glide is driving; don't treat its own scrolling as a gesture
+        return
+      }
+      const speed = Math.abs(y - lastY)
+      if (from === null) from = lastY // lastY still holds the pre-gesture position
+      lastY = y
+      clearTimeout(timer)
+      timer = setTimeout(onIdle, speed < CRAWL ? IDLE_CRAWL : IDLE)
+    }
+
+    addEventListener('scroll', onScroll, { passive: true })
+    addEventListener('wheel', stop, { passive: true })
+    addEventListener('touchstart', stop, { passive: true })
+    return () => {
+      clearTimeout(timer)
+      stop()
+      removeEventListener('scroll', onScroll)
+      removeEventListener('wheel', stop)
+      removeEventListener('touchstart', stop)
+    }
+  }, [selector])
+}
+
+// ---- publish an element's live height to CSS as a custom property ----------
+// The captions are centred against the PLANE, not the viewport: the sticky column centres
+// (plane + gap + players) as a group, so the plane's midline sits above the viewport's by half of
+// whatever hangs below it. Measuring is what lets CSS apply that offset — hardcoding it would
+// drift the moment the embed markup or track count changes.
+// Writes the property straight onto the host element instead of going through React state: only
+// CSS consumes it, and routing it through a render would rebuild the whole journey (d3 plane
+// included) on every sub-pixel ResizeObserver tick during a window drag.
+export function useSizeVar(prop, hostSelector) {
+  const ref = useRef(null)
+  useEffect(() => {
+    const el = ref.current
+    const host = el?.closest(hostSelector)
+    if (!el || !host) return
+    const ro = new ResizeObserver(([e]) =>
+      host.style.setProperty(prop, `${Math.round(e.contentRect.height)}px`),
+    )
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [prop, hostSelector])
+  return ref
 }
 
 // ---- debounce a fast-changing value (used to hold off reloading the Spotify
@@ -49,126 +219,6 @@ export function useDebounced(value, delay = 140) {
     return () => clearTimeout(t)
   }, [value, delay])
   return settled
-}
-
-// One decade hop lasts DURATION ms; the hero → first-decade glide is deliberately slower.
-const DURATION = 150
-const HERO_DURATION = 450
-const COOLDOWN = 80
-
-const prefersReducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
-const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3) // moves at once, then settles
-
-// Document-absolute scroll position that vertically centres `el` in the viewport.
-function centerTargetY(el) {
-  const rect = el.getBoundingClientRect()
-  const off = Math.max(0, (window.innerHeight - rect.height) / 2)
-  return Math.max(0, Math.round(rect.top + window.scrollY - off))
-}
-
-// Eased rAF scroll to an absolute Y over `dur` ms; runs `onDone` when it lands.
-// No-op for tiny hops. Returns a handle whose `.raf` the caller can cancel.
-function glide(scroller, targetY, dur, onDone) {
-  const startY = window.scrollY
-  const dist = targetY - startY
-  if (Math.abs(dist) < 4) return null
-  const handle = { raf: null }
-  let start = null
-  const frame = (ts) => {
-    if (start === null) start = ts
-    const p = Math.min(1, (ts - start) / dur)
-    scroller.scrollTop = startY + dist * easeOutCubic(p) // scrollTop = instant per frame
-    if (p < 1) handle.raf = requestAnimationFrame(frame)
-    else onDone?.()
-  }
-  handle.raf = requestAnimationFrame(frame)
-  return handle
-}
-
-// ---- wheel-guided section scroll: one wheel gesture glides you to the next
-//      section over ~0.6s (eased). Immediate (no debounce), locked during the
-//      glide so momentum doesn't stack. Only guides within `selector` (hero +
-//      journey); past the last target it lets the page scroll natively. Disabled
-//      for touch (native) and reduced-motion. ----------------------------------
-export function useSectionScroll(selector) {
-  useEffect(() => {
-    if (prefersReducedMotion()) return
-    const scroller = document.scrollingElement || document.documentElement
-    let handle = null
-    let animating = false
-    let cooldownUntil = 0
-
-    // Section centre targets, sorted top-to-bottom. Scroll-invariant (absolute doc
-    // positions), so measure once and refresh only on resize — not per wheel event.
-    // The sections mount after data loads, so (re)measure lazily until they exist.
-    let T = []
-    const measure = () => {
-      T = Array.from(document.querySelectorAll(selector)).map(centerTargetY).sort((a, b) => a - b)
-    }
-
-    const glideTo = (targetY, dur) => {
-      handle = glide(scroller, targetY, dur, () => {
-        animating = false
-        cooldownUntil = performance.now() + COOLDOWN
-      })
-      animating = handle !== null
-    }
-
-    const onWheel = (e) => {
-      if (e.ctrlKey) return // pinch-zoom — leave it alone
-      if (T.length < 2) measure()
-      if (T.length < 2) return
-      // Below the journey (coda/footer): scroll natively.
-      if (window.scrollY > T[T.length - 1] + window.innerHeight * 0.4) return
-      const dir = e.deltaY > 0 ? 1 : e.deltaY < 0 ? -1 : 0
-      if (dir === 0) return
-      const y = window.scrollY
-      let idx = 0
-      let best = Infinity
-      T.forEach((t, i) => {
-        const d = Math.abs(t - y)
-        if (d < best) {
-          best = d
-          idx = i
-        }
-      })
-      const next = idx + dir
-      if (next < 0 || next >= T.length) return // at an end → native scroll
-      e.preventDefault()
-      if (animating || performance.now() < cooldownUntil) return
-      // One decade hop = DURATION. Scale by distance so every transition moves at the
-      // SAME velocity — so the bigger jump up to the hero glides like decade scrolling,
-      // not an instant teleport. Only the downward hero -> first-decade glide is slow.
-      const stepRef = T.length > 2 ? Math.abs(T[2] - T[1]) : Math.abs(T[1] - T[0])
-      const dur =
-        idx === 0 && next === 1
-          ? HERO_DURATION
-          : Math.round(DURATION * (Math.abs(T[next] - T[idx]) / stepRef))
-      glideTo(T[next], dur)
-    }
-
-    window.addEventListener('wheel', onWheel, { passive: false })
-    window.addEventListener('resize', measure)
-    return () => {
-      window.removeEventListener('wheel', onWheel)
-      window.removeEventListener('resize', measure)
-      if (handle?.raf) cancelAnimationFrame(handle.raf)
-    }
-  }, [selector])
-}
-
-// Smoothly scroll an element to the vertical centre of the viewport over `duration`
-// ms (eased). Used for one-off programmatic scrolls (e.g. the toggle) that want a
-// controllable speed instead of the browser's fixed-speed scrollIntoView.
-export function scrollToCenter(el, duration = 550) {
-  if (!el) return
-  const scroller = document.scrollingElement || document.documentElement
-  const targetY = centerTargetY(el)
-  if (prefersReducedMotion()) {
-    scroller.scrollTop = targetY
-    return
-  }
-  glide(scroller, targetY, duration)
 }
 
 // ---- reveal-on-scroll for the standalone beats ----------------------------

@@ -10,6 +10,7 @@ data/raw/
 # Node / React
 node_modules/
 app/dist/
+app/test-results/
 
 # OS/editor
 .DS_Store

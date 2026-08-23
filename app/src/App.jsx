@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useData, useSectionScroll, scrollToCenter, JOURNEYS, VAR_INFO } from './lib.js'
+import { useData, useSettleToStep, JOURNEYS, VAR_INFO } from './lib.js'
 import Journey from './components/Journey.jsx'
 import Beat from './components/Beat.jsx'
 import { WorldChart } from './charts/WorldChart.jsx'
@@ -10,7 +10,7 @@ export default function App() {
   const data = useData()
   const [jid, setJid] = useState(JOURNEYS[0].id)
   const [showTop, setShowTop] = useState(false)
-  useSectionScroll('.hero, .step')
+  useSettleToStep('.step')
 
   useEffect(() => {
     const onScroll = () => setShowTop(window.scrollY > window.innerHeight * 0.8)
@@ -59,8 +59,10 @@ export default function App() {
               onClick={() => {
                 if (j.id !== jid) {
                   setJid(j.id)
-                  // glide down into the journey (first decade, centered) — a touch slower
-                  scrollToCenter(document.querySelector('.step'), 650)
+                  // Glide down into the journey (first decade, centered). No `behavior` on
+                  // purpose: omitting it defers to CSS scroll-behavior, which the
+                  // prefers-reduced-motion query already flips to `auto` for us.
+                  document.querySelector('.step')?.scrollIntoView({ block: 'center' })
                 }
               }}
             >

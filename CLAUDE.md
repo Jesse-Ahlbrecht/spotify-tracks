@@ -30,6 +30,8 @@ Keep the browser payload to a few MB (stratified samples, per-year aggregates, p
 - Rebuild+run notebooks: `python scripts/build_notebooks.py && jupyter nbconvert --to notebook --execute --inplace notebooks/*.ipynb`
 - App data: `python scripts/export_app_data.py` (writes `app/public/data/*.json` from the same loaders)
 - App: `cd app && npm install && npm run dev` / `npm run build` (needs Node ≥18; `nvm install --lts`)
+- Scroll/layout checks: `cd app && npm run preview` then `npm run check:scroll -- --url http://localhost:4173`
+  (Playwright, desktop + mobile-touch; add `--shots` for screenshots, `--headed` to watch)
 
 ## Notebooks
 Authored via `scripts/build_notebooks.py` (nbformat) then executed with nbconvert, so they stay
