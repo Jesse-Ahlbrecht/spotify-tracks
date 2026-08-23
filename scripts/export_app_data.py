@@ -37,8 +37,7 @@ def none_or(x, n):
 
 def main():
     df = load_timeline()
-    df["minor"] = df["mode"] == 0                                    # 0 = minor key
-    df["sad_banger"] = (df["valence"] < 0.5) & (df["energy"] > 0.5)  # low-valence + high-energy
+    df["minor"] = df["mode"] == 0  # 0 = minor key
 
     # --- per-decade dials the journey + beats read ---
     def agg(g):
@@ -47,7 +46,6 @@ def main():
             "energy": r(g.energy.mean()),
             "danceability": r(g.danceability.mean()),
             "minor_share": r(g.minor.mean()),
-            "sad_banger": r(g.sad_banger.mean()),
             "acousticness": r(g.acousticness.mean()),
         }
 

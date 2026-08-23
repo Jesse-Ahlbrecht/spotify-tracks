@@ -23,16 +23,32 @@ export function useData() {
 
 // ---- scrollytelling: which step is at the "reading line" ------------------
 // The reading line is where a decade comes to rest, as a fraction of viewport height: centred on
-// desktop, lower on mobile where the sticky plane covers the top of the screen. Both consumers
-// derive from it — the observer band below, and the settle target in useSettleToStep — so they
-// cannot drift apart. CSS needs the same number: `scroll-padding-top` in the <900px query is
-// `2 * line - 100`, which is where 62dvh comes from.
+// desktop, lower on mobile where the sticky plane covers the top of the screen. Every consumer
+// derives from this one number — the observer band, useSettleToStep's targets, and
+// scrollToReadingLine — so they cannot drift apart, and CSS never needs to know it.
 const MOBILE = '(max-width: 900px)' // must match the layout switch in index.css
 const BAND = 6 // half-height of the active band, in % of viewport
 const readingLine = (mobile) => (mobile ? 0.81 : 0.5)
+const isMobile = () => window.matchMedia(MOBILE).matches
 const stepBand = (mobile) => {
   const line = readingLine(mobile) * 100
   return `-${line - BAND}% 0px -${100 - line - BAND}% 0px`
+}
+
+// Where `el` must sit for its midline to land on the reading line.
+const readingLineY = (el) => {
+  const r = el.getBoundingClientRect()
+  return Math.round(r.top + window.scrollY + r.height / 2 - window.innerHeight * readingLine(isMobile()))
+}
+
+// Scroll the first `sel` onto the reading line. Computing the target beats
+// `scrollIntoView({block:'center'})`, which only ever centres — matching it on mobile used to take
+// a document-wide `scroll-padding-top`, and every non-decade scroll target then had to cancel it.
+// No `behavior`: omitting it defers to CSS scroll-behavior, which the prefers-reduced-motion query
+// already flips to `auto` for us. Same reason the plain scrollIntoView callers omit it.
+export function scrollToReadingLine(sel) {
+  const el = document.querySelector(sel)
+  if (el) window.scrollTo({ top: readingLineY(el) })
 }
 
 export function useActiveStep(count) {
@@ -84,7 +100,6 @@ const easeInOut = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2)
 export function useSettleToStep(selector) {
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    const mql = window.matchMedia(MOBILE)
     let timer = null
     let raf = null // non-null iff a glide is in flight
     let lastY = window.scrollY
@@ -118,21 +133,22 @@ export function useSettleToStep(selector) {
     // Scroll positions at which each step sits on the reading line. Re-queried per settle rather
     // than cached: step geometry moves on resize, breakpoint cross, font load and journey switch,
     // and this only runs when the page is already quiescent.
-    const targets = () => {
-      const line = window.innerHeight * readingLine(mql.matches)
-      const y = window.scrollY
-      return [...document.querySelectorAll(selector)].map((el) => {
-        const r = el.getBoundingClientRect()
-        return Math.round(r.top + y + r.height / 2 - line)
-      })
-    }
+    const targets = () => [...document.querySelectorAll(selector)].map(readingLineY)
 
     const settle = () => {
       const T = targets()
       if (T.length < 2) return
       const y = window.scrollY
-      // Outside the journey (hero above, coda/footer below) scrolling is left alone.
-      if (y < T[0] - EDGE || y > T[T.length - 1] + EDGE) return
+      // Outside the journey — the hero and the explainer above, the coda and footer below —
+      // scrolling is left alone. The top edge is the step column's own box, NOT T[0]: a reading-line
+      // position sits up to a viewport away from the block it belongs to, so on mobile (line 0.81,
+      // no column padding) T[0] - EDGE landed inside the explainer and armed the settle while the
+      // reader was still on it. The bottom edge stays T[n] — the column's trailing padding runs a
+      // viewport past the last decade, and arming that far down would snap the coda back.
+      const column = document.querySelector(selector)?.parentElement
+      if (!column) return
+      const columnTop = column.getBoundingClientRect().top + y
+      if (y < columnTop - EDGE || y > T[T.length - 1] + EDGE) return
 
       const travelled = y - from
       const nearest = T.reduce((a, t) => (Math.abs(t - y) < Math.abs(a - y) ? t : a))
@@ -240,6 +256,15 @@ export function useInView(options = { rootMargin: '-15% 0px -15% 0px' }) {
   return [ref, seen]
 }
 
+// ---- axis strings ----------------------------------------------------------
+// VAR_INFO's axis strings are "← low   name   high →" (triple-spaced). Split so the low/high
+// descriptors can sit at the plot's edges — or in their own column on the intro cards — while the
+// name stays on its own. The triple spacing is what the split keys off; keep it.
+export function splitAxis(label) {
+  const parts = label.split(/\s{2,}/)
+  return parts.length === 3 ? parts : [null, label, null]
+}
+
 // One short caption per decade for the mood journey's steps — valence × energy only.
 export const DECADE_CAPTIONS = {
   1920: 'Where it begins, in the calm-and-bright corner: valence at its century high, energy near its floor. Positive, but gentle.',
@@ -300,9 +325,9 @@ const INTENSITY_CAPTIONS = {
   2020: 'Energy finally plateaus even as acousticness stays low — the electrification that drove intensity has largely run its course.',
 }
 
-// The single source of per-metric truth: label + one-line gloss (shown under the toggle), the axis
-// colour, and the "← low   name   high →" axis string the plane draws. Everything metric-specific
-// keys off this table so nothing is duplicated across the config.
+// The single source of per-metric truth: label + one-line gloss, the axis colour, and the
+// "← low   name   high →" axis string the plane draws. Everything metric-specific keys off this
+// table so nothing is duplicated across the config.
 export const VAR_INFO = {
   valence: { label: 'Valence', desc: 'how positive a song sounds', color: 'var(--c-valence)', axis: '← sadder   valence   happier →' },
   energy: { label: 'Energy', desc: 'how intense and driving it feels', color: 'var(--c-energy)', axis: '← calmer   energy   more intense →' },
@@ -311,14 +336,37 @@ export const VAR_INFO = {
   acousticness: { label: 'Acousticness', desc: 'how acoustic vs. electric / digital', color: 'var(--c-acoustic)', axis: '← electric / digital   acousticness   acoustic →' },
 }
 
-// The four decade-journeys the tabbed switcher offers. Each plots two metrics (`x`/`y` are keys
-// into VAR_INFO, which supplies each axis's label and colour); its representative tracks
+// Each journey opens on an explainer screen: the arc in one line, before the two dials that draw
+// it. Deliberately no raw feature values — valence 0.6 means nothing to a reader, and the plane
+// two screens down prints the numbers anyway. Shape and direction only; where a proportion of
+// songs says it better than an adjective ("one in four"), that is plain enough to keep.
+const INTROS = {
+  mood: {
+    title: 'Happy, or hard?',
+    hook: 'Over a century, music’s intensity more than doubled — while how positive it sounds slipped only slightly, and mostly in the last twenty years. Two dials that refuse to move together.',
+  },
+  beat: {
+    title: 'Did we lose the groove?',
+    hook: 'Danceability starts high in the Jazz Age, slumps through the war years, then climbs back past where it began — all while energy rises without pause. The beat came back; the intensity never left.',
+  },
+  sad: {
+    title: 'Two kinds of sad',
+    hook: 'A song can sound sad, or be written sad. Minor keys go from roughly one song in four to nearly one in two, while how positive music sounds barely moves until the 2000s — the tonal darkening runs decades ahead of the mood.',
+  },
+  intensity: {
+    title: 'Why so intense?',
+    hook: 'Music begins almost entirely acoustic and ends almost entirely electric, as amps, synths and studios take over — and its intensity rises in near-perfect mirror image. The clearest single trend in a hundred years.',
+  },
+}
+
+// The four decade-journeys the tabbed switcher offers. Each plots exactly two metrics (`x`/`y` are
+// keys into VAR_INFO, which supplies each axis's label and colour); its representative tracks
 // (tracks.json[id]) are the songs nearest that plane's per-decade centroid. The journey's accent
 // colour is derived at use as VAR_INFO[y].color. `coda: true` appends the year-based
-// "Does music mirror the world?" closing chart after that journey.
+// "Does music mirror the world?" closing chart after it.
 export const JOURNEYS = [
-  { id: 'mood', tab: 'Mood', x: 'valence', y: 'energy', sizeKey: 'minor_share', captions: DECADE_CAPTIONS, coda: true },
-  { id: 'beat', tab: 'The beat', x: 'energy', y: 'danceability', sizeKey: 'minor_share', captions: BEAT_CAPTIONS },
-  { id: 'sad', tab: 'Two kinds of sad', x: 'valence', y: 'minor_share', sizeKey: 'sad_banger', captions: SAD_CAPTIONS },
-  { id: 'intensity', tab: 'Why so intense', x: 'energy', y: 'acousticness', sizeKey: 'minor_share', captions: INTENSITY_CAPTIONS },
+  { id: 'mood', tab: 'Mood', x: 'valence', y: 'energy', captions: DECADE_CAPTIONS, intro: INTROS.mood, coda: true },
+  { id: 'beat', tab: 'The beat', x: 'energy', y: 'danceability', captions: BEAT_CAPTIONS, intro: INTROS.beat },
+  { id: 'sad', tab: 'Two kinds of sad', x: 'valence', y: 'minor_share', captions: SAD_CAPTIONS, intro: INTROS.sad },
+  { id: 'intensity', tab: 'Why so intense', x: 'energy', y: 'acousticness', captions: INTENSITY_CAPTIONS, intro: INTROS.intensity },
 ]

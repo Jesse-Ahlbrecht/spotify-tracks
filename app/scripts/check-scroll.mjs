@@ -46,13 +46,25 @@ const swipe = async (cdp, { x, y, dy, steps = 20 }) => {
 }
 
 const scrollY = (page) => page.evaluate(() => window.scrollY)
-// Park on a decade. Negative index counts from the end.
-const goToStep = (page, i) =>
-  page.evaluate((i) => {
-    const s = [...document.querySelectorAll('.step')]
-    s.at(i).scrollIntoView({ block: 'center', behavior: 'instant' })
-  }, i)
+// Park a decade on the reading line. Negative index counts from the end. Mirrors
+// scrollToReadingLine() in src/lib.js rather than calling it — the whole point of a black-box
+// check is that it computes the expected position independently.
+const goToStep = (page, i, line = 0.5) =>
+  page.evaluate(
+    ({ i, line }) => {
+      const r = [...document.querySelectorAll('.step')].at(i).getBoundingClientRect()
+      const top = r.top + window.scrollY + r.height / 2 - window.innerHeight * line
+      window.scrollTo({ top, behavior: 'instant' })
+    },
+    { i, line },
+  )
 const settle = async (page, ms = 900) => { await page.waitForTimeout(ms) }
+// `behavior: 'instant'` on purpose: the bare form inherits `scroll-behavior: smooth`, so from deep
+// in the page this would animate thousands of pixels and race whatever we measure next.
+const toTop = async (page) => {
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
+  await settle(page, 400)
+}
 
 // How far the nearest decade is from the reading line it should have come to rest on. `line` is
 // readingLine() from lib.js — 0.5 on desktop, 0.81 on mobile, where the sticky plane sits on top.
@@ -65,6 +77,52 @@ const offBy = (page, line = 0.5) =>
     })
     return Math.round(Math.min(...d))
   }, line)
+
+// Measure a block that should have been scrolled fully into the readable strip, and assert it.
+const clearOfBar = async (page, name, topSel, botSel) => {
+  const m = await page.evaluate(
+    ([topSel, botSel]) => {
+      const box = (s) => document.querySelector(s)?.getBoundingClientRect()
+      return {
+        barBottom: box('.topbar').bottom,
+        top: box(topSel)?.top,
+        bottom: box(botSel)?.bottom,
+        label: document.querySelector(topSel)?.textContent.slice(0, 32),
+        vh: window.innerHeight,
+      }
+    },
+    [topSel, botSel],
+  )
+  check(
+    name,
+    m.top > m.barBottom && m.bottom <= m.vh,
+    `“${m.label}” at ${Math.round(m.top)}px, block ends ${Math.round(m.bottom)}px of ${m.vh}px,` +
+      ` topbar ends ${Math.round(m.barBottom)}px`,
+  )
+}
+
+// Picking a story is two hops: the tab lands that story's explainer screen, and its "Dive in"
+// button lands the first decade. Both must clear the sticky topbar, at both breakpoints.
+const tabAndDiveIn = async (page, where) => {
+  await toTop(page)
+  await page.getByRole('tab', { name: 'Two kinds of sad' }).click()
+  await settle(page, 1400)
+  await clearOfBar(
+    page,
+    `tab switch scrolls that story's intro into view, clear of the topbar (${where})`,
+    '.journey-intro h2',
+    '.journey-intro .explore-btn',
+  )
+
+  await page.locator('.journey-intro .explore-btn').click()
+  await settle(page, 1400)
+  await clearOfBar(
+    page,
+    `"Dive in" scrolls the first decade into view, clear of the topbar (${where})`,
+    '.step-inner.active',
+    '.step-inner.active',
+  )
+}
 
 async function main() {
   const browser = await chromium.launch({ headless: !HEADED })
@@ -240,22 +298,19 @@ async function main() {
   await rmPage.close()
   await page.emulateMedia({ reducedMotion: 'no-preference' })
 
-  // Tab switcher lands the first decade clear of the sticky topbar.
-  await page.evaluate(() => window.scrollTo(0, 0))
-  await settle(page, 400)
-  await page.getByRole('tab', { name: 'Two kinds of sad' }).click()
-  await settle(page, 1400)
-  const tab = await page.evaluate(() => {
-    const bar = document.querySelector('.topbar').getBoundingClientRect()
-    const step = document.querySelector('.step').getBoundingClientRect()
-    const cap = document.querySelector('.step-inner').getBoundingClientRect()
-    return { barBottom: bar.bottom, stepTop: step.top, capTop: cap.top, capBottom: cap.bottom }
+  // The cue parks at the hero's bottom edge, so it only shows if the hero ends at the fold.
+  await toTop(page)
+  const heroCue = await page.evaluate(() => {
+    const r = document.querySelector('.scroll-cue').getBoundingClientRect()
+    return { bottom: r.bottom, vh: window.innerHeight }
   })
   check(
-    'tab switch scrolls the first decade into view, clear of the topbar',
-    tab.capTop > tab.barBottom && tab.capBottom < 982,
-    `caption ${Math.round(tab.capTop)}–${Math.round(tab.capBottom)}px, topbar ends ${Math.round(tab.barBottom)}px`,
+    'scroll cue is above the fold (desktop)',
+    heroCue.bottom <= heroCue.vh,
+    `cue ends ${Math.round(heroCue.bottom)}px of ${heroCue.vh}px`,
   )
+
+  await tabAndDiveIn(page, 'desktop')
 
   check('no console/page errors (desktop)', errors.length === 0, errors.slice(0, 3).join(' | '))
 
@@ -274,11 +329,10 @@ async function main() {
   await mp.waitForSelector('.step', { timeout: 15_000 })
   const mcdp = await mobile.newCDPSession(mp)
 
-  // The hero must not overflow the visible viewport badly — the 100vh → 100dvh fix plus the
-  // mobile type/padding trim. The scroll cue is the last thing in the hero, so it is the test.
-  // The actionable hero content — headline and the story tabs — must be reachable without
-  // scrolling. The scroll cue trails below the fold on a short phone because the lede runs four
-  // sentences; shortening that is a copy decision, so it is reported, not asserted.
+  // The hero must fit the visible viewport: the 100vh → 100dvh fix, the mobile type/padding trim,
+  // and `min-height: calc(100dvh - var(--topbar))` — without that last one the hero runs a full
+  // topbar taller than the screen and the cue, parked at its bottom edge, falls under the fold.
+  // All three are asserted now; the cue used to trail below and be merely reported.
   const cue = await mp.evaluate(() => {
     const box = (s) => document.querySelector(s).getBoundingClientRect()
     return {
@@ -289,10 +343,11 @@ async function main() {
     }
   })
   check(
-    'headline + story tabs are above the fold',
-    cue.h1 <= cue.vh && cue.tabs <= cue.vh,
-    `h1 ends ${Math.round(cue.h1)}px, tabs end ${Math.round(cue.tabs)}px of ${cue.vh}px` +
-      ` (scroll cue at ${Math.round(cue.cueBottom)}px — below the fold, copy-length bound)`,
+    'headline, story tabs and scroll cue are above the fold (mobile)',
+    cue.h1 <= cue.vh && cue.tabs <= cue.vh && cue.cueBottom <= cue.vh,
+    `h1 ends ${Math.round(cue.h1)}px, tabs ${Math.round(cue.tabs)}px, cue ${Math.round(
+      cue.cueBottom,
+    )}px of ${cue.vh}px`,
   )
 
   // Touch swipe must scroll at all — there is no wheel event on a phone.
@@ -305,7 +360,7 @@ async function main() {
   check('touch swipe scrolls the page', mMoved > 200, `moved ${Math.round(mMoved)}px`)
 
   // Settling has to work off a finger too, against the mobile reading line (below the plane).
-  await goToStep(mp, 3)
+  await goToStep(mp, 3, MOBILE_LINE)
   await settle(mp, 1200)
   await swipe(mcdp, { x: 195, y: 600, dy: 260 })
   await settle(mp, 1500)
@@ -313,7 +368,7 @@ async function main() {
   check('touch swipe settles onto a decade', mOff < 16, `came to rest ${mOff}px off a decade`)
 
   // The sticky graphic must leave room for a caption.
-  await goToStep(mp, 4)
+  await goToStep(mp, 4, MOBILE_LINE)
   await settle(mp)
   const layout = await mp.evaluate(() => {
     const g = document.querySelector('.journey-graphic').getBoundingClientRect()
@@ -364,6 +419,8 @@ async function main() {
   await settle(mp)
   const cMoved = (await scrollY(mp)) - cBefore
   check('swipe starting on the coda chart scrolls the page', cMoved > 150, `moved ${Math.round(cMoved)}px`)
+
+  await tabAndDiveIn(mp, 'mobile')
 
   check('no page errors (mobile)', mErrors.length === 0, mErrors.slice(0, 3).join(' | '))
 

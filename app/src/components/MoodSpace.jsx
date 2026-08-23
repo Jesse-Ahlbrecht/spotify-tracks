@@ -2,26 +2,20 @@ import { useMemo } from 'react'
 import { scaleLinear } from 'd3-scale'
 import { line as d3line } from 'd3-shape'
 import { extent } from 'd3-array'
+import { splitAxis } from '../lib.js'
 
 const W = 560
 const H = 470
 const M = { t: 26, r: 30, b: 62, l: 82 }
+const R_NOW = 13 // spotlight radius. Was a third metric mapped to size; two axes read cleaner.
 
 function pad([a, b], p) {
   return [a - p, b + p]
 }
 
-// Axis labels are "← low   name   high →" (triple-spaced); split so the low/high
-// descriptors can sit at the plot's edges and the name stays centered.
-function splitAxis(label) {
-  const parts = label.split(/\s{2,}/)
-  return parts.length === 3 ? parts : [null, label, null]
-}
-
-// The hero: music's path across a two-metric plane, with the active decade as a
-// spotlighted dot (size = a third metric). Axes, size metric and colour are set per
-// journey via props. Position animates via CSS.
-export default function MoodSpace({ decades, active, xKey, yKey, xLabel, yLabel, sizeKey, accent }) {
+// The hero: music's path across a two-metric plane, with the active decade as a spotlighted dot.
+// Axes and colour are set per journey via props. Position animates via CSS.
+export default function MoodSpace({ decades, active, xKey, yKey, xLabel, yLabel, accent }) {
   const x = useMemo(
     () => scaleLinear().domain(pad(extent(decades, (d) => d[xKey]), 0.015)).range([M.l, W - M.r]),
     [decades, xKey],
@@ -30,17 +24,12 @@ export default function MoodSpace({ decades, active, xKey, yKey, xLabel, yLabel,
     () => scaleLinear().domain(pad(extent(decades, (d) => d[yKey]), 0.04)).range([H - M.b, M.t]),
     [decades, yKey],
   )
-  const size = useMemo(
-    () => scaleLinear().domain(extent(decades, (d) => d[sizeKey])).range([8, 24]),
-    [decades, sizeKey],
-  )
   const path = useMemo(
     () => d3line().x((d) => x(d[xKey])).y((d) => y(d[yKey]))(decades),
     [decades, x, y, xKey, yKey],
   )
 
   const cur = decades[active]
-  const rNow = size(cur[sizeKey]) // marker radius = the journey's size metric
   const [xLow, xName, xHigh] = splitAxis(xLabel)
   const [yLow, yName, yHigh] = splitAxis(yLabel)
 
@@ -94,9 +83,9 @@ export default function MoodSpace({ decades, active, xKey, yKey, xLabel, yLabel,
 
       {/* the spotlighted current decade (position animates); colour = journey accent */}
       <g className="ms-now" style={{ transform: `translate(${x(cur[xKey])}px, ${y(cur[yKey])}px)`, '--accent': accent }}>
-        <circle className="ms-now-halo" r={rNow + 7} />
-        <circle className="ms-now-core" r={rNow} />
-        <text className="ms-now-label" x={rNow + 12} dy="0.32em">
+        <circle className="ms-now-halo" r={R_NOW + 7} />
+        <circle className="ms-now-core" r={R_NOW} />
+        <text className="ms-now-label" x={R_NOW + 12} dy="0.32em">
           {cur.decade}s
         </text>
       </g>

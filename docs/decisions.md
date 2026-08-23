@@ -288,3 +288,122 @@ not reproduced. Playwright is a devDependency only — the shipped bundle is sti
 
 **AI disclosure:** diagnosis, the replacement, and the check script are Claude-generated, reviewed by
 Jesse. The mobile sizing constants were tuned against emulated 390×700 Chromium, not a real handset.
+
+## 2026-08-23 — Each journey opens on an explainer screen
+
+Jesse: each journey should start with a screen explaining, at a high level, how music changed and
+what the plotted variables mean, ending on "do you want to dive in?".
+
+Before this, the tab switcher dropped you straight onto a scatter plane with two unfamiliar axes.
+The only framing was one line under the toggle listing the two metrics' glosses — easy to scroll
+past, and it said nothing about the arc you were about to travel.
+
+**Shape: a full-width section between the hero and the plane**, not a step inside the scroll
+column. A step-0 intro would have meant re-indexing `useActiveStep`, the settle targets and the
+mobile reading band — all of which the 2026-08-23 scroll rework had just finished tuning — and it
+would have squeezed the copy into the narrow caption column. As a standalone section it sits above
+the first `.step`, which is outside `useSettleToStep`'s `EDGE` range, so it scrolls freely with no
+settle opt-out needed.
+
+Each journey gained an `intro: { title, hook }` in `JOURNEYS`; the axis cards are derived from
+`VAR_INFO` via the journey's `x`/`y`, so a new journey needs no new component code. `splitAxis()`
+moved from `MoodSpace.jsx` into `lib.js` and is now shared by the plane and the cards. The hero's
+duplicate metric line and its CSS went with it. Picking a tab now lands that story's intro rather
+than its first decade; the intro's button makes the second hop.
+
+**Dropped the dot-size encoding.** Each journey used to map a third metric (`minor_share`, or
+`sad_banger` on the sad journey) to the spotlight's radius. Writing the explainer made the cost
+visible: it needed a third card to explain a channel nobody asked about, and a plane that claims to
+be about two things reads better when it is about two things. `sizeKey`, the d3 size scale and the
+`sad_banger` metric entry are gone; the marker is a constant radius. `sad_banger` was left computed
+and exported for a while afterwards; the cleanup pass below removed it from
+`scripts/export_app_data.py` and regenerated `timeline.json`, so the export no longer carries a
+column nothing reads. (Every other value in the regenerated file is byte-identical, and
+`tracks.json` is unchanged — the sad journey's *track picking* uses `valence`/`minor`, not
+`sad_banger`.)
+
+**No raw feature values in the copy.** The first draft quoted the actual dial readings ("energy
+climbs from 0.28 to 0.63"). Jesse cut them: they are on Spotify's arbitrary 0–1 scale and mean
+nothing to a reader who has not yet seen the plane, which prints the numbers anyway two screens
+down. The hooks now carry shape and direction only — except proportions of songs ("one song in four
+to nearly one in two"), which are plain enough to keep.
+
+**Verification:** `npm run check:scroll` is now 27 checks, 27 passing. The existing "tab switch
+scrolls the first decade into view" guard was rewritten rather than deleted — the behaviour it
+described changed on purpose, so it now asserts the tab lands the *intro* clear of the topbar, and a
+new check asserts "Dive in" then lands the first decade, preserving the original intent one hop
+later. Both run on mobile too, which previously had no tab-switch coverage; that caught two real
+bugs measurement found and reading would not have:
+- The reveal animated `transform: translateY(24px)`. A translated element is scrolled into view at
+  its *translated* position, so the fade-in then yanked the section 24px out from under the reader.
+  The intro is a scroll target, so it fades only — `.beat` keeps its slide.
+- `justify-content: center` on a screen-tall block put the first line behind the sticky topbar on a
+  390×700 phone, and the content ran 724px against a 700px viewport, pushing the button off-screen.
+  Mobile is now top-aligned below the topbar with trimmed type; the button lands with ~40px to
+  spare. Removing the third card bought most of that room back.
+
+**AI disclosure:** the component, styles, intro copy and the two new checks are Claude-generated,
+reviewed by Jesse. Mobile sizing was tuned against emulated 390×700 Chromium, not a real handset.
+
+### Follow-up: `scroll-padding-top` deleted; the reading line has one owner again
+
+A cleanup pass over the above. The intro initially shipped with
+`.journey-intro { scroll-margin-top: -62dvh }` — a *negative* scroll-margin whose only job was to
+cancel `html { scroll-padding-top: 62dvh }`. That padding is document-wide but served exactly one
+call site (landing a decade on the 0.81 reading line via `scrollIntoView({block:'center'})`), so
+adding a second scroll target meant the new target had to pay, and the rule became "anything
+scrolled to on mobile that isn't a decade must remember to cancel 62dvh". The `0.81` had also
+spread to four places.
+
+Both CSS rules are gone. `lib.js` now exports `scrollToReadingLine(sel)`, built from the same
+`readingLine()` that `useSettleToStep` and the observer band already share — it computes the target
+position instead of asking the browser to centre and then correcting for it. `62dvh` no longer
+exists in CSS, `0.81` lives in one place (plus a deliberate independent copy in the check script),
+and plain `scrollIntoView` works again for every other target.
+
+Two more from the same pass:
+- **The settle's top boundary was derived, and wrong on mobile.** `useSettleToStep` bounded itself
+  with `y < T[0] - EDGE`, but `T[0]` is a *reading-line position*, which sits up to a viewport away
+  from the block it belongs to. On mobile (line 0.81, no column padding) that put the boundary ~69px
+  inside the explainer, so the settle armed while the reader was still on it — while three comments
+  and this log claimed it could not. It now bounds off the step column's own box. The bottom edge
+  deliberately stays `T[n]`: the column's trailing padding runs a viewport past the last decade, and
+  arming that far down would snap the coda back.
+- **`min-height: 100dvh` → `100svh` on the intro.** `dvh` re-resolves as the mobile URL bar
+  collapses; on a mid-page section that reflows all 11 steps below it mid-scroll — the exact hazard
+  `.hero`'s own comment rules out. `.hero` keeps `dvh` (above the fold, nothing below it to shift).
+
+Also deduped: `.dial` was a fourth copy of the card recipe and `.dial-role` a third copy of
+`.kicker`; the recipe is now one grouped selector over `.moodspace, .embed, .fig-plot, .dial`, and
+the dials just use `.kicker`. CSS bundle 9.57 → 9.03 kB. `.journey-graphic`'s hardcoded `top: 52px`
+now reads `var(--topbar)`, so the new token unifies rather than adding a third encoding of the bar's
+height.
+
+### Follow-up: the scroll cue was under the fold all along
+
+Jesse, on the new landing page: "it is now not clear that I need to scroll down." Measuring found a
+pre-existing bug the explainer had merely made obvious. `.hero` is `min-height: 100dvh`, but the
+hero starts *below* the 72px sticky topbar — so it was always exactly one topbar taller than the
+screen, and `.scroll-cue`, parked at its bottom edge by `margin-top: auto`, hung ~28px under the
+fold at every viewport size. Removing the hero's metric line widened the gap above the cue and made
+the missing affordance impossible to ignore.
+
+Fixed with a `--topbar` token (72px, 52px on mobile) and `min-height: calc(100dvh - var(--topbar))`
+on both the hero and the new intro screen; the cue also went from `--muted` at 0.85rem to `--ink-2`
+at 0.95rem, since it is the only thing telling you the page continues. Two checks cover it now: a
+new desktop "scroll cue is above the fold", and the mobile hero check — which previously *reported*
+the cue as below the fold and "copy-length bound" — upgraded to assert it. The token also replaced
+the hardcoded 60px top padding on the mobile intro.
+
+### Follow-up: the cue is a button, and the intro drops its question
+
+Two trims from Jesse. The hero's scroll cue became a real `<button>` carrying `.explore-btn` (the
+same pill as "Dive in"), scrolling to the selected story's intro — the same hop the tab switcher
+makes, now shared as `toIntro()`. And the intro's "Ready to dive in?" line went: the button already
+asks, and a prose question above a button labelled "Dive in ↓" is the same sentence twice.
+
+Making the cue a button surfaced a small a11y problem the decorative version hid: the `bob`
+animation was on the element itself, so as a click target it moved under the pointer forever —
+Playwright refused to click it ("element is not stable") and anyone aiming at it would have had the
+same fight. The animation now lives on an inner `.cue-arrow` span, so the pill is stationary and the
+arrow still bobs.

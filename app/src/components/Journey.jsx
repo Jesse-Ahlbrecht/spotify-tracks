@@ -30,7 +30,6 @@ export default function Journey({ decades, tracks, journey }) {
           yKey={journey.y}
           xLabel={VAR_INFO[journey.x].axis}
           yLabel={VAR_INFO[journey.y].axis}
-          sizeKey={journey.sizeKey}
           accent={VAR_INFO[journey.y].color}
         />
         <div className="embed-stack" ref={stackRef}>

@@ -1,10 +1,15 @@
 import { useState, useEffect } from 'react'
 import { useData, useSettleToStep, JOURNEYS, VAR_INFO } from './lib.js'
 import Journey from './components/Journey.jsx'
+import JourneyIntro from './components/JourneyIntro.jsx'
 import Beat from './components/Beat.jsx'
 import { WorldChart } from './charts/WorldChart.jsx'
 
 const toTop = () => window.scrollTo({ top: 0, behavior: 'smooth' })
+// Down to the selected story's explainer — the hero's cue and the tab switcher share this hop.
+// No `behavior` on purpose: omitting it defers to CSS scroll-behavior, which the
+// prefers-reduced-motion query already flips to `auto` for us.
+const toIntro = () => document.querySelector('.journey-intro')?.scrollIntoView({ block: 'start' })
 
 export default function App() {
   const data = useData()
@@ -59,10 +64,7 @@ export default function App() {
               onClick={() => {
                 if (j.id !== jid) {
                   setJid(j.id)
-                  // Glide down into the journey (first decade, centered). No `behavior` on
-                  // purpose: omitting it defers to CSS scroll-behavior, which the
-                  // prefers-reduced-motion query already flips to `auto` for us.
-                  document.querySelector('.step')?.scrollIntoView({ block: 'center' })
+                  toIntro() // its "Dive in" button takes it from there
                 }
               }}
             >
@@ -70,16 +72,13 @@ export default function App() {
             </button>
           ))}
         </div>
-        <p className="story-about">
-          {[journey.x, journey.y].map((k, i) => (
-            <span className="story-about-item" key={k}>
-              {i > 0 && <span className="story-about-vs"> vs. </span>}
-              <b style={{ color: VAR_INFO[k].color }}>{VAR_INFO[k].label}</b> — {VAR_INFO[k].desc}
-            </span>
-          ))}
-        </p>
-        <div className="scroll-cue">scroll to travel through time ↓</div>
+        <button className="explore-btn scroll-cue" onClick={toIntro}>
+          scroll to travel through time <span className="cue-arrow">↓</span>
+        </button>
       </section>
+
+      {/* Keyed so switching stories remounts the explainer and its reveal replays. */}
+      <JourneyIntro key={journey.id} journey={journey} />
 
       <Journey decades={decades} tracks={data.tracks} journey={journey} />
 
