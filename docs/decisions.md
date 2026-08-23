@@ -342,8 +342,22 @@ bugs measurement found and reading would not have:
   Mobile is now top-aligned below the topbar with trimmed type; the button lands with ~40px to
   spare. Removing the third card bought most of that room back.
 
+**Correction: the hooks flattened valence.** Three of the four shipped hooks described how positive
+music sounds as essentially static — "slipped only slightly, and mostly in the last twenty years"
+(mood) and "barely moves until the 2000s" (sad). Checking the decade means says otherwise: valence
+runs 0.600 (1920s) → 0.495 (1950s, its century low) → 0.580 (the 1970s–80s plateau) → 0.503 today.
+Down, up, then down again. The *net* change is small, and the copy had quietly sold that flat net as
+the story, hiding a mid-century trough larger than the modern slide. The mood hook now names the
+arc, and the sad hook makes the sharper true claim: minor-key share has a direction (it rises nearly
+every decade), valence has none — only one kind of sad is actually a trend. The beat hook's "energy
+rises without pause" was wrong on its own terms too; energy hits its century *floor* in the 1940s
+and rolls over in the 2020s, which the journey's own 2020 caption ("energy finally levels off")
+already said. Same pass fixed `SAD_CAPTIONS[2010]`, which called a 39.6% minor share "a third".
+The per-decade captions needed no changes — they had tracked the real curve all along.
+
 **AI disclosure:** the component, styles, intro copy and the two new checks are Claude-generated,
 reviewed by Jesse. Mobile sizing was tuned against emulated 390×700 Chromium, not a real handset.
+The valence correction above was also Claude-generated, prompted by Jesse catching the flattening.
 
 ### Follow-up: `scroll-padding-top` deleted; the reading line has one owner again
 

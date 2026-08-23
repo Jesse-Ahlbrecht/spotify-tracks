@@ -103,9 +103,10 @@ export default function App() {
         <p>
           <b>The takeaway:</b> across a century, music grew <em>more intense</em> (electrification),
           <em> more minor-key</em> (a steady tonal darkening), and <em>a little less positive</em> —
-          three threads that don’t all point the same way, and none of which simply mirror the world
-          around them. Why the darkening? Likely genre, the streaming economy, and culture — but
-          that’s the next question, not this dataset’s answer.
+          though by a wandering route: a mid-century low, a seventies rebound, then a slide that’s
+          still going. Three threads that don’t all point the same way, and none of which simply
+          mirror the world around them. Why the darkening? Likely genre, the streaming economy, and
+          culture — but that’s the next question, not this dataset’s answer.
         </p>
         <p className="credits">
           Built from ~587k tracks (1922–2021) + US economic series (FRED). An exploratory,

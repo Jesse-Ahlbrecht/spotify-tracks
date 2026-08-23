@@ -383,7 +383,7 @@ const SAD_CAPTIONS = {
   1980: 'About a third of songs now lean minor. The tonal “darkening” becomes a real trend even as valence stays up.',
   1990: 'Steady valence, gathering minor keys. The two kinds of sad start to pull apart in earnest.',
   2000: 'Valence begins its real decline just as minor-key writing accelerates — for the first time both sadnesses climb together.',
-  2010: 'The “sad banger” era. Valence drops hard and minor keys surge — melancholy you can dance to becomes a third of all tracks.',
+  2010: 'The “sad banger” era. Valence drops hard and minor keys surge — melancholy you can dance to becomes two songs in five.',
   2020: 'Nearly half of songs are now minor — the most in a century — while valence sits near its modern low. Both kinds of sad, at once.',
 }
 
@@ -420,15 +420,15 @@ export const VAR_INFO = {
 const INTROS = {
   mood: {
     title: 'Happy, or hard?',
-    hook: 'Over a century, music’s intensity more than doubled — while how positive it sounds slipped only slightly, and mostly in the last twenty years. Two dials that refuse to move together.',
+    hook: 'Music’s intensity more than doubled over a century. Positivity took a wilder route — bright in the Jazz Age, lowest in the fifties, back up by the seventies, falling ever since. Two dials that refuse to move together.',
   },
   beat: {
     title: 'Did we lose the groove?',
-    hook: 'Danceability starts high in the Jazz Age, slumps through the war years, then climbs back past where it began — all while energy rises without pause. The beat came back; the intensity never left.',
+    hook: 'Danceability starts high in the Jazz Age, slumps through the war years, then climbs past where it began. Energy bottoms out in those same years, then rises for seventy straight. The beat came back; the intensity kept going.',
   },
   sad: {
     title: 'Two kinds of sad',
-    hook: 'A song can sound sad, or be written sad. Minor keys go from roughly one song in four to nearly one in two, while how positive music sounds barely moves until the 2000s — the tonal darkening runs decades ahead of the mood.',
+    hook: 'A song can sound sad, or be written sad. Minor keys climb decade after decade, from roughly one song in four to nearly one in two. Mood has no such direction — it dips, rebounds, then dips again. Only one kind of sad is really a trend.',
   },
   intensity: {
     title: 'Why so intense?',
