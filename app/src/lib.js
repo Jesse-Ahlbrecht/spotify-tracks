@@ -376,6 +376,19 @@ export function splitAxis(label) {
   return parts.length === 3 ? parts : [null, label, null]
 }
 
+// The descriptors carry a horizontal arrow because that is how they read along the bottom of a
+// plot. Strip it wherever they don't run left-to-right and the caller points its own way.
+export function bareEnd(s) {
+  return s ? s.replace(/^←\s*/, '').replace(/\s*→$/, '') : s
+}
+
+// A flipped scale (`flipY`) puts the metric's high end at the bottom, so the two descriptors change
+// places — and each carries an arrow that points along the axis, which then points the wrong way.
+// Re-point as well as swap: returns [bottom, top] for a flipped axis.
+export function flipEnds(low, high) {
+  return [high && `← ${bareEnd(high)}`, low && `${bareEnd(low)} →`]
+}
+
 // One short caption per decade for the mood journey's steps — valence × energy only.
 export const DECADE_CAPTIONS = {
   1920: 'Where it begins, in the calm-and-bright corner: valence at its century high, energy near its floor. Positive, but gentle.',
@@ -474,10 +487,11 @@ const INTROS = {
 // keys into VAR_INFO, which supplies each axis's label and colour); its representative tracks
 // (tracks.json[id]) are the songs nearest that plane's per-decade centroid. The journey's accent
 // colour is derived at use as VAR_INFO[y].color. `coda: true` appends the year-based
-// "Does music mirror the world?" closing chart after it.
+// "Does music mirror the world?" closing chart after it. `flipY: true` reverses the vertical
+// scale, so a metric that falls over the century still draws as a rising path.
 export const JOURNEYS = [
   { id: 'mood', tab: 'Mood', x: 'valence', y: 'energy', captions: DECADE_CAPTIONS, intro: INTROS.mood, coda: true },
   { id: 'beat', tab: 'The beat', x: 'energy', y: 'danceability', captions: BEAT_CAPTIONS, intro: INTROS.beat },
   { id: 'sad', tab: 'Two kinds of sad', x: 'valence', y: 'minor_share', captions: SAD_CAPTIONS, intro: INTROS.sad },
-  { id: 'intensity', tab: 'Why so intense', x: 'energy', y: 'acousticness', captions: INTENSITY_CAPTIONS, intro: INTROS.intensity },
+  { id: 'intensity', tab: 'Why so intense', x: 'energy', y: 'acousticness', captions: INTENSITY_CAPTIONS, intro: INTROS.intensity, flipY: true },
 ]

@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { scaleLinear } from 'd3-scale'
 import { line as d3line } from 'd3-shape'
 import { extent } from 'd3-array'
-import { splitAxis, usePlaneRoomy } from '../lib.js'
+import { flipEnds, splitAxis, usePlaneRoomy } from '../lib.js'
 
 // Two geometries, not one scaled down. The svg sizes by viewBox alone, so its font sizes are user
 // units: shrinking a 560-wide plane into a phone column renders 13px ticks at ~7px. `compact` is
@@ -36,7 +36,7 @@ function pad([a, b], p) {
 
 // The hero: music's path across a two-metric plane, with the active decade as a spotlighted dot.
 // Axes and colour are set per journey via props. Position animates via CSS.
-export default function MoodSpace({ decades, active, xKey, yKey, xLabel, yLabel, accent, compact }) {
+export default function MoodSpace({ decades, active, xKey, yKey, xLabel, yLabel, flipY, accent, compact }) {
   // One query, not `useIsTall() || useIsShort()` — `||` short-circuits, so the second hook went
   // uncalled whenever the first was true, and rotating across the boundary changed the hook count.
   const roomy = usePlaneRoomy()
@@ -46,9 +46,12 @@ export default function MoodSpace({ decades, active, xKey, yKey, xLabel, yLabel,
     () => scaleLinear().domain(pad(extent(decades, (d) => d[xKey]), 0.015)).range([M.l, W - M.r]),
     [decades, xKey, M, W],
   )
+  // `flipY` puts the metric's high end at the bottom, so a century-long fall (acousticness) draws
+  // as a rise. Everything positional goes through y(), so only the range turns over.
   const y = useMemo(
-    () => scaleLinear().domain(pad(extent(decades, (d) => d[yKey]), 0.04)).range([H - M.b, M.t]),
-    [decades, yKey, M, H],
+    () => scaleLinear().domain(pad(extent(decades, (d) => d[yKey]), 0.04))
+      .range(flipY ? [M.t, H - M.b] : [H - M.b, M.t]),
+    [decades, yKey, M, H, flipY],
   )
   const path = useMemo(
     () => d3line().x((d) => x(d[xKey])).y((d) => y(d[yKey]))(decades),
@@ -58,6 +61,9 @@ export default function MoodSpace({ decades, active, xKey, yKey, xLabel, yLabel,
   const cur = decades[active]
   const [xLow, xName, xHigh] = splitAxis(xLabel)
   const [yLow, yName, yHigh] = splitAxis(yLabel)
+  // The descriptors label where they sit, not the metric's order: with the scale flipped the
+  // bottom of the axis is its high end, and both arrows turn over with it.
+  const [yBottom, yTop] = flipY ? flipEnds(yLow, yHigh) : [yLow, yHigh]
   // The "← sadder / happier →" descriptors are the first thing to collide once the plot is a phone
   // wide, and they are the most expendable: the axis name alone still says what the axis is.
   const ends = D.ends
@@ -90,14 +96,14 @@ export default function MoodSpace({ decades, active, xKey, yKey, xLabel, yLabel,
       {ends && xLow && <text className="ms-axis" x={M.l} y={H - D.axisY} textAnchor="start">{xLow}</text>}
       <text className="ms-axis ms-axis-title" x={(M.l + W - M.r) / 2} y={H - D.axisY} textAnchor="middle">{xName}</text>
       {ends && xHigh && <text className="ms-axis" x={W - M.r} y={H - D.axisY} textAnchor="end">{xHigh}</text>}
-      {ends && yLow && (
-        <text className="ms-axis" transform={`translate(${D.yAxisX},${H - M.b}) rotate(-90)`} textAnchor="start">{yLow}</text>
+      {ends && yBottom && (
+        <text className="ms-axis" transform={`translate(${D.yAxisX},${H - M.b}) rotate(-90)`} textAnchor="start">{yBottom}</text>
       )}
       <text className="ms-axis ms-axis-title" transform={`translate(${D.yAxisX},${(M.t + H - M.b) / 2}) rotate(-90)`} textAnchor="middle">
         {yName}
       </text>
-      {ends && yHigh && (
-        <text className="ms-axis" transform={`translate(${D.yAxisX},${M.t}) rotate(-90)`} textAnchor="end">{yHigh}</text>
+      {ends && yTop && (
+        <text className="ms-axis" transform={`translate(${D.yAxisX},${M.t}) rotate(-90)`} textAnchor="end">{yTop}</text>
       )}
 
       {/* the century path */}

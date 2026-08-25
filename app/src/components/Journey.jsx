@@ -37,6 +37,7 @@ export default function Journey({ decades, tracks, journey }) {
       yKey={journey.y}
       xLabel={VAR_INFO[journey.x].axis}
       yLabel={VAR_INFO[journey.y].axis}
+      flipY={journey.flipY}
       accent={VAR_INFO[journey.y].color}
       compact={compact}
     />

@@ -741,3 +741,25 @@ the dead-space check both measured `.deck-plane`, whose container is stretched t
 design in landscape — so the emptiness check passed trivially. It measures `.moodspace` now.
 
 **Verification: 139/139**, five viewports, two consecutive clean runs.
+
+## 2026-08-26 — The electrification plane reads as a rise, not a fall
+
+The "Why so intense" journey plots energy × acousticness, and acousticness falls across the century,
+so the century path *descended* — the picture said decline while the story said the opposite.
+Flipped it, via a `flipY` flag on the journey (lib.js `JOURNEYS`) that reverses MoodSpace's y range.
+
+- **Reversed the scale, not the metric.** The alternative was plotting `1 − acousticness` as an
+  "electric / digital" metric, which ascends on its own. Rejected: it would fork the exported field,
+  the captions and the track-picking space for a presentation choice. Only the range turns over;
+  everything positional already goes through `y()`.
+- **The descriptors label where they sit.** "← electric / digital" / "acoustic →" have to swap ends
+  *and* re-point their arrows when the scale flips — swapping alone left both arrows pointing the
+  wrong way. `flipEnds()` in lib.js does both; Jesse caught the half-fix on the first pass.
+- **The vertical dial on the explainer stacks now.** It printed the axis as a left-to-right range
+  ("← electric / digital … acoustic →") for an axis with no left or right. It reads
+  "↑ electric / digital / ↓ acoustic", which also means the flip needs no arrow rewriting there.
+- One regression, caught by the harness: the taller dial pushed the dive-in button 9px past the fold
+  at 844×390. The landscape block already meant to hide that row but was still selecting
+  `.dial-range`, a name nothing had carried for a while, so it was hiding nothing.
+
+**Verification: 139/139**, five viewports.

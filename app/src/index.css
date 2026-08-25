@@ -300,6 +300,8 @@ em { font-style: normal; color: var(--accent); transition: color 0.3s ease; }
 .dial-name { font-weight: 600; font-size: 1.15rem; letter-spacing: -0.01em; margin-top: 0.3em; }
 .dial-desc { color: var(--ink-2); font-size: 0.95rem; }
 .dial-arrow { color: var(--muted); font-size: 0.82rem; margin-top: 0.6em; }
+/* The vertical axis's two ends read bottom-to-top, so they stack rather than share a row. */
+.dial-arrow.vert { display: flex; flex-direction: column; line-height: 1.5; }
 /* The invitation is the one thing on this screen to click, so let it fill its content, not the
    column. `.explore-btn` supplies the pill; this just stops it stretching edge to edge. */
 .journey-intro .explore-btn { align-self: start; }
@@ -700,7 +702,11 @@ figcaption { margin-top: 10px; color: var(--ink-2); font-size: 0.9rem; max-width
   .intro-dials { grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0.7rem 0; }
   .dial { padding: 8px 10px; }
   .dial-desc { font-size: 0.82rem; line-height: 1.35; }
-  .dial-range { display: none; }
+  /* The direction row goes here — it is the dial's most expendable line, and the vertical axis
+     spends two of them. (Was `.dial-range`, a name nothing has carried for a while, so the row was
+     never actually hidden; the taller vertical dial is what pushed the dive-in button past the
+     fold at 844×390.) `.vert` is named too — the modifier outranks a bare `.dial-arrow`. */
+  .dial-arrow, .dial-arrow.vert { display: none; }
   .intro-ask { display: none; }
 
   /* Plane in a sticky left column spanning every page's row; pages stack in the right one. */

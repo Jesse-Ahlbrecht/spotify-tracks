@@ -1,15 +1,25 @@
-import { useInView, scrollToReadingLine, splitAxis, VAR_INFO } from '../lib.js'
+import { bareEnd, useInView, scrollToReadingLine, splitAxis, VAR_INFO } from '../lib.js'
 
-// One dial card: what the metric is, and which way it runs on the plane.
-function Dial({ metric, role }) {
+// One dial card: what the metric is, and which way it runs on the plane. The vertical axis stacks
+// its ends and points up/down, because a left-to-right "low … high" row describes a direction the
+// plane doesn't have. `flip` mirrors the journey's flipped scale — which end is on top.
+function Dial({ metric, role, vertical, flip }) {
   const v = VAR_INFO[metric]
-  const [low, , high] = splitAxis(v.axis)
+  const [lowEnd, , highEnd] = splitAxis(v.axis)
+  const [bottom, top] = flip ? [highEnd, lowEnd] : [lowEnd, highEnd]
   return (
     <div className="dial">
       <div className="kicker">{role}</div>
       <div className="dial-name" style={{ color: v.color }}>{v.label}</div>
       <div className="dial-desc">{v.desc}</div>
-      <div className="dial-arrow">{low} … {high}</div>
+      {vertical ? (
+        <div className="dial-arrow vert">
+          <span>↑ {bareEnd(top)}</span>
+          <span>↓ {bareEnd(bottom)}</span>
+        </div>
+      ) : (
+        <div className="dial-arrow">{lowEnd} … {highEnd}</div>
+      )}
     </div>
   )
 }
@@ -29,7 +39,7 @@ export default function JourneyIntro({ journey }) {
 
       <div className="intro-dials">
         <Dial metric={x} role="horizontal axis" />
-        <Dial metric={y} role="vertical axis" />
+        <Dial metric={y} role="vertical axis" vertical flip={journey.flipY} />
       </div>
 
       <button className="explore-btn" onClick={() => scrollToReadingLine('.step')}>
