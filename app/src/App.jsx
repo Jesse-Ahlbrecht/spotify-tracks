@@ -42,7 +42,22 @@ export default function App() {
   return (
     <div className="app" style={{ '--accent': accent }}>
       <header className="topbar">
-        <span className="brand">The Sound of Time</span>
+        <span className="brand">
+          {/* Same mark as the favicon. currentColor, not a hard-coded ink: the page is light-only
+              today, so this tracks --ink and would invert for free if a dark theme ever lands.
+              aria-hidden because the text beside it already names the site. */}
+          <svg className="brand-mark" viewBox="0 0 64 64" aria-hidden="true">
+            <path
+              d="M4 32 H20 C24 2.7 28 2.7 32 32 C36 61.3 40 61.3 44 32 H60"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          The Sound of Time
+        </span>
         <span className="topbar-sub">How a century changed its tune.</span>
       </header>
 
