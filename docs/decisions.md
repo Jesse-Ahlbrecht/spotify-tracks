@@ -537,3 +537,207 @@ Then the deferred items from that pass were cleared too:
 Claude-generated from Jesse's brief and successive design cuts, reviewed by Jesse. The `activeDecade`
 test helper shipped broken first (`Number("1920s")` → NaN) and was caught by six red checks, not by
 reading.
+
+## 2026-08-23 — Mobile: a deck, not the desktop layout squeezed
+
+**Jesse, on a real handset: "the button at the beginning does not work, the layout does not work in
+general. At the top it should show the decade and then below that show the songs, swiping to the
+right should allow me to play the other songs as well."**
+
+The `<900px` branch had been the two-column scrolly stacked: sticky plane across the top, captions
+scrolling under it. Measured on a 390×700 phone, that block took **56% of the screen** and the
+caption it was meant to leave room for started at 647px of 700 — off the bottom. The plane's own
+text rendered at **7.4px**, because the svg sizes by viewBox alone and its CSS font sizes are user
+units, so shrinking a 560-wide plane into a phone column shrinks the type with it. And nine Spotify
+iframes were mounted to show one player.
+
+**Decision: mobile renders a different tree, not the same one reflowed.** One decade per screen,
+under a pinned compact plane — vertical swipe for time, horizontal for that decade's songs. This is
+the shape Jesse asked for, and it is the shape that fits: the three things a decade needs (its name,
+its caption, its music) do not co-exist on a 700px screen any other way.
+
+- **The plane got a second geometry rather than a scale factor.** `MoodSpace` and `LineFig` each
+  carry a `{ wide, compact }` dimension table, with compact picked so one user unit is about one CSS
+  px at phone width. Ticks now render at **13.4px / 12.9px** (plane) and **11.3px** (coda). The
+  margins and tick counts come down; the type does not. Compact also drops the plane's
+  "← sadder / happier →" descriptors (they collide first, and the axis name still says what it is)
+  and the coda's SVG direct labels, which reclaims the 120-unit right margin they existed for — the
+  HTML legend above already names every series.
+- **All three songs, reachable.** The old rule was `iframe:not(:first-child) { display: none }` —
+  two thirds of each decade's music simply unreachable. Now a horizontally snapping track with
+  dots. Deliberately **no `touch-action` on the carousel**: the browser's own direction locking
+  picks pan-x, and pinning it would kill vertical scrolling over most of the screen — the same
+  mistake `.fig-plot` made with `none`.
+- **Nine iframes → three.** The ±1 decade window exists for the desktop cross-fade; the deck shows
+  one page at a time and has nothing to cross-fade, so only the settled decade mounts.
+- **`scroll-snap` is back, and this is not a contradiction of the 2026-08-23 entry above.** That
+  failure was 60vh proximity regions fought by *desktop wheel* events, which re-snapped after every
+  discrete notch. Full-screen pages driven by touch are the case snap is built for. `proximity`, not
+  `mandatory`, because the coda and footer are not page-sized and mandatory would refuse to rest
+  inside them. `useSettleToStep` is switched off on mobile — two things steering one scroll is what
+  the whole scroll rework was about.
+- **The 0.81 reading line is gone.** It existed to push captions below the sticky plane. A deck page
+  is exactly one viewport tall, so centring it *is* aligning its top: `readingLine` is now a
+  constant 0.5, serving both layouts, and the constant that used to be triplicated across `lib.js`,
+  CSS and the check script is down to one place that no longer varies.
+- **The decade arrows are desktop-only.** A swipe is the deck's pager, and their fixed right gutter
+  cost ~54px of a 375px screen. This retires a feature from the device it was arguably most for; the
+  argument is that the gesture it substitutes for is the one that now works.
+- **Landscape got a real layout, not a smaller one.** At 844×390 every story tab sat at `top: 392px`
+  — the entire hero below the fold, `elementFromPoint` returning null for all four. Landscape's
+  scarce axis is height and its spare one is width, so the plane moves *beside* the pages and the
+  explainer goes three-across. Guarded by a `max-height: 460px` query, not a width one.
+
+**The button bug: not reproduced, and probably already fixed.** Simulating URL-bar collapse (growing
+the viewport mid-scroll) at 390 and 375 did not break the tab or "Dive in" jumps. The likeliest
+culprit is the swallowed-jump bug fixed in `03fb3ec` earlier the same day: for ~620ms after any
+gesture a settle glide rewrites scroll position every frame from a `start` captured before the
+click. On a phone *every tap follows a touch gesture*, so it would fire almost every time and almost
+never under a desktop mouse. `SETTLE_CANCEL` fixes it. Recorded as unconfirmed rather than closed —
+the honest state is that the mechanism fits and the symptom is gone in emulation.
+
+**Verification: 79/79 checks**, the mobile block now parameterised over **390×700, 375×667 and
+844×390** instead of one viewport. New guards are aimed squarely at what shipped broken: rendered
+SVG text ≥9 CSS px on both charts, decade + caption + songs on screen together, all three songs
+present and reachable by a real sideways touch drag without the page moving, ≤3 iframes, 44px tap
+targets, no horizontal overflow, and a jump surviving a viewport resize mid-scroll. The desktop
+checks are untouched and still green.
+
+Also fixed alongside: hover styling moved behind `@media (hover: hover)` (on touch it latched after
+a tap and read as stuck state), the first `:focus-visible` rules in the stylesheet, `.to-top` up to a
+44px target with `env(safe-area-inset-bottom)`, `viewport-fit=cover` so that env() resolves, and
+`pointercancel`/`pointerup` clearing the coda tooltip — on touch `pan-y` claims any vertical drag and
+fires `pointercancel`, never `pointerleave`, so it used to stay up indefinitely.
+
+**Still unverified:** a real handset. Emulation is what passed while Jesse's phone failed, so the
+same caveat as last time applies with more force — the checks are necessary, not sufficient.
+
+**AI disclosure:** the deck, the compact chart geometries, the carousel, the landscape layout and the
+extended checks are Claude-generated from Jesse's brief and the three design cuts he chose (plane
+pinned above the decade; deck over arrows; desktop untouched), reviewed by Jesse. The diagnosis that
+the old layout's caption fell off the bottom, and that the chart text rendered at 7px, came from
+measurement before any code changed — neither was visible by reading the CSS.
+
+### Follow-ups from Jesse's first pass on the deck
+
+Five things caught by looking at it, four of which the checks had missed:
+
+- **Story tabs: a column, not a wrapped grid.** Four tabs at `flex: 1 1 40%` wrapped into two ragged
+  rows of unequal pills, and the selected one read as a stray rather than one of a set. Stacked, every
+  choice is the same shape and full width. It costs ~100px of a hero that had 14px of slack, paid for
+  by the lede's last sentence (`Pick a story below…` — redundant with four labelled buttons directly
+  beneath it, so hidden on mobile via `.lede-tail`, not deleted) plus a tighter type scale. The
+  toggle needs an explicit `width: 100%`: the hero is a flex column and `margin: … auto` centres a
+  flex item at content width, which as a column is just the longest label. Landscape stays one row.
+- **The decade heading was clipped behind the plane.** `useSizeVar` published `contentRect.height`,
+  so `--plane-h` missed the plane's own 18px of padding and its border, and the page padded itself
+  19px short. Now border-box. **The check had passed** because it asked whether the heading was below
+  `y = 0` — true, and invisible, since the plane paints over it. It now measures against the plane's
+  bottom edge, or the topbar's where the two sit side by side.
+- **Empty pages.** Only the settled decade mounts players, so every other page collapsed to a caption
+  and left ~220px blank inside a full-height page. Two fixes: an `.embed-slot` that reserves their
+  height whether or not they are mounted, so a page is the same shape before and after they load,
+  and mounting keyed off `active` rather than the debounced `settled` — a page is on screen the
+  moment it is active, and waiting 140ms showed it empty. Content is also centred in the band below
+  the plane rather than top-aligned, which was pooling the whole difference into one slab at the
+  bottom. Trailing space on the settled page: 220px → 50px.
+- **Spotify embeds now use `?theme=0`.** The default samples a background from the album art, so
+  three players in a row were three unrelated colours fighting the page and each other.
+- **"swipe for all 3" is gone.** The dots say there are three and which one you are on; a hint that
+  restates the control is noise.
+
+The first three are the interesting ones: all three were visible in a glance at the screen and none
+were visible to a passing check. The heading clip in particular is the sharpest reminder here — a
+green check asserting the wrong predicate is worse than no check, because it buys false confidence.
+
+Three more from the same pass:
+
+- **The decade label was clipped to "192".** It parks beside the spotlighted dot, and the outermost
+  `<svg>` clips by default, so at the decade whose dot is furthest right it ran off the edge. It now
+  flips to the dot's left when it would not fit. This affected the wide geometry too — desktop was
+  within 14px of the same bug — so the guard runs at all four viewports.
+- **The players lost their card.** `.embed` takes the app's shared raised-surface treatment, which on
+  a deck page wrapped a white card around Spotify's own dark rounded card — and on an otherwise
+  plain-text page that outer box was the only frame on screen. Stripped on mobile only.
+- **"Sounds like the 1920s" is gone from the carousel**, for the same reason as the swipe hint: the
+  decade heading sits directly above it, so it named the decade twice.
+
+**Verification: 86/86**, six of seven consecutive runs fully clean. The one failure was
+`an arrow click outranks a settle glide in flight` — a desktop check this work does not touch, and
+the same transient the 2026-08-23 entry above already records as observed once and not reproduced.
+Recording it again rather than quietly re-running until green: it is a real flake in a real check,
+and the honest rate is ~1 in 7, not zero.
+
+### Second round of follow-ups — the ones the viewports hid
+
+Everything below came from Jesse looking at real device sizes. The pattern is worth naming: each
+bug was invisible because the harness sampled the wrong part of the range, not because the check
+logic was wrong.
+
+- **Landscape phones were getting the desktop layout.** `MOBILE` was width-only, and a phone in
+  landscape is 932×430 — *wider* than 900, so it fell through to the two-column desktop tree in a
+  430px-tall window: plane clipped top and bottom, players entirely below the fold. The breakpoint
+  is now `(max-width: 900px), (max-height: 500px) and (max-width: 1200px)` in both `lib.js` and
+  `index.css`, with the height arm bounded by width so a short-but-wide desktop window is unaffected.
+  The landscape case had been "tested" at 844×390 — which is under 900 wide, so it never exercised
+  this at all.
+- **A deck page was mostly empty on a tall phone.** Content is a fixed height while a page is one
+  viewport tall, so the leftover grew with the screen: 18% of an SE, **40% of a Pro Max**. The plane
+  is the only thing that can absorb it, but its height is bound by viewBox aspect against available
+  *width*, so it never grows. Fixed with a second compact geometry (`compactTall`, 320×290 against
+  320×210) used on tall portrait screens and in landscape, where the plane gets a full-height column
+  of its own. Now 18–24% portrait and 11–13% landscape. The two viewports originally checked, 667
+  and 700, were the two shortest cases in the range.
+- **Snap: proximity → mandatory.** Proximity let a scroll rest anywhere, and anywhere on a deck page
+  means the caption half-swallowed by the sticky plane — a page only clears the plane at its snapped
+  position. Mandatory requires that *every* full-screen block be a snap point: the first attempt
+  gave them only to `.deck-page`, and the hero, having none, was snapped off-screen the instant you
+  touched the page, taking the story tabs with it. The coda and footer are snap points too and are
+  taller than a phone screen, which the spec lets scroll freely once entered. Guarded by a new
+  "can scroll past the last decade to the footer" check — mandatory snap's failure mode is exactly
+  the dead end the original scroll rework exists to prevent.
+- **`scroll-snap-stop: always`.** A hard flick sailed past decades — measured, one swipe went
+  1950s → 1970s. Now a swipe is worth exactly one decade however hard it is thrown.
+- **The embed blanked mid-scroll** — Jesse spotted it, and it was a direct cost of the previous
+  round's "9 iframes → 3". Mounting only the current decade means its players load *as you arrive*,
+  and you watch the rectangle fill. Reverted to the ±1 window desktop uses, for the reason already
+  in the log: a neighbour costs nothing to keep mounted and is already there when you reach it. The
+  check now asserts ≤9 as a ceiling rather than ≤3 as a goal.
+- **The landscape hero stopped short.** A `min-height: 0` left over from when its content ran 445px;
+  after the type trims it is ~330px, so the override only made the hero end early and bleed the
+  explainer into the same screen. New check: the hero and explainer each fill a screen.
+
+Two harness bugs fixed alongside, both of which had been quietly passing: the dead-space measure
+counted only the text column, which called a full landscape page 36% empty when the plane column
+beside it was full; and the carousel checks used unscoped selectors, so once the ±1 window mounted
+three carousels they read the *previous* decade's dots and saw them not move.
+
+**Verification: 139/139**, five viewports — 375×667, 390×844, 430×932, 844×390, 932×430 — chosen to
+span the range rather than cluster at one end, which is the mistake that made this round necessary.
+
+### Spacing pass, from Jesse looking at real device sizes
+
+- **Snap was parking every screen behind the topbar.** `scroll-snap-align: start` aligns to the top
+  of the *scrollport*, which is under the sticky bar — so on load the page scrolled 52px, the hero's
+  first line hid behind the topbar, and every full-height block (sized `100svh − topbar`) ended a
+  topbar short of the bottom, stranding the scroll cue ~60px above the fold. `scroll-padding-top:
+  var(--topbar)` fixes all of it in one line, and lets the blocks below stop padding for the bar
+  themselves: `.deck-page` is now `100svh − topbar` tall and pads only for the plane.
+- **Landscape** got real breathing room now that the hero fills the screen: space above the title
+  8px → 30px, the gaps between title, lede and tabs 11px → 24/29px, and the cue 61px → 13px off the
+  bottom. The sticky plane is stretched to the visible band and centres the plot inside it — left
+  to size itself it hugged the top (8px above, 70px below), which also made the text column beside
+  it, which *is* centred, read as sitting low.
+- **Tall portrait screens** pooled all their slack in one place: `.scroll-cue`'s `margin-top: auto`
+  claimed every pixel of free space, so the hero bunched against the topbar above a single 298px
+  void. `justify-content: space-evenly` spreads it. On a decade page the same slack went above the
+  plane rather than between the decade, its caption and its player — those are one thought and
+  stay a group; Jesse's call, and the right one.
+- **Jump-to-top is desktop-only**, joining the decade arrows. Fixed chrome costs more on a small
+  screen than it returns, and on the deck it floated over the songs half of every page.
+
+Two more harness bugs found while doing it, both previously green: the "fills a screen" check and
+the dead-space check both measured `.deck-plane`, whose container is stretched to the full band by
+design in landscape — so the emptiness check passed trivially. It measures `.moodspace` now.
+
+**Verification: 139/139**, five viewports, two consecutive clean runs.

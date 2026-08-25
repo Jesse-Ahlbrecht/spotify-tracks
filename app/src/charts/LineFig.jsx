@@ -2,10 +2,17 @@ import { useMemo, useRef, useState } from 'react'
 import { scaleLinear } from 'd3-scale'
 import { line as d3line, area as d3area } from 'd3-shape'
 import { extent, bisector } from 'd3-array'
+import { useIsMobile } from '../lib.js'
 
-const W = 720
-const H = 400
-const M = { t: 20, r: 120, b: 46, l: 52 }
+// Two geometries, for the reason MoodSpace has two: the svg sizes by viewBox alone, so its font
+// sizes are user units and a 720-wide box in a phone column renders 12px ticks at ~6px. `compact`
+// is picked so one user unit is about one CSS px at phone width.
+// The wide right margin exists only to park the direct labels; compact drops those and reclaims
+// all of it, because the HTML legend above already names every series.
+const DIMS = {
+  wide: { W: 720, H: 400, M: { t: 20, r: 120, b: 46, l: 52 }, xTicks: 6, direct: true },
+  compact: { W: 340, H: 250, M: { t: 12, r: 14, b: 40, l: 40 }, xTicks: 4, direct: false },
+}
 
 // Shared multi-series line/area chart: one y-axis (never dual), legend + direct
 // labels, recessive grid, and a crosshair+tooltip hover layer.
@@ -23,10 +30,12 @@ export default function LineFig({
 }) {
   const [hover, setHover] = useState(null)
   const wrapRef = useRef(null)
+  const D = useIsMobile() ? DIMS.compact : DIMS.wide
+  const { W, H, M } = D
 
   const x = useMemo(
     () => scaleLinear().domain(extent(data, (d) => d[xKey])).range([M.l, W - M.r]),
-    [data, xKey],
+    [data, xKey, M, W],
   )
   const y = useMemo(() => {
     const dom =
@@ -35,7 +44,7 @@ export default function LineFig({
         data.flatMap((d) => series.map((s) => d[s.key])).filter((v) => v != null),
       )
     return scaleLinear().domain(dom).nice().range([H - M.b, M.t])
-  }, [data, series, yDomain])
+  }, [data, series, yDomain, M, H])
 
   // Paths depend only on data + scales, not on hover — memoize so mouse-moves don't
   // rebuild/re-run the d3 generators.
@@ -65,16 +74,21 @@ export default function LineFig({
     const xv = x.invert(Math.max(M.l, Math.min(W - M.r, svgX)))
     setHover(bis(data, xv))
   }
+  // On touch, `pan-y` means a swipe with any vertical component is claimed by the browser, which
+  // fires pointercancel and never pointerleave — so without this the tooltip stays up for good.
+  const clear = () => setHover(null)
 
   // Direct labels park in the right margin at their line's end height, nudged apart
-  // so they never overlap or clip.
-  const labelX = W - M.r + 10
+  // so they never overlap or clip. Empty on the compact geometry, which has no right margin to
+  // park them in — gated here rather than at the call site so the work is skipped, not discarded.
   const directLabels = useMemo(() => {
+    if (!D.direct) return []
+    const labelX = W - M.r + 10
     const lastPoint = (k) => data.findLast((d) => d[k] != null) ?? null
     const labels = series
       .map((s) => {
         const p = lastPoint(s.key)
-        return p ? { key: s.key, color: s.color, label: s.label, y: y(p[s.key]) } : null
+        return p ? { key: s.key, color: s.color, label: s.label, x: labelX, y: y(p[s.key]) } : null
       })
       .filter(Boolean)
       .sort((a, b) => a.y - b.y)
@@ -82,7 +96,7 @@ export default function LineFig({
       if (labels[i].y - labels[i - 1].y < 16) labels[i].y = labels[i - 1].y + 16
     }
     return labels
-  }, [data, series, y])
+  }, [data, series, y, D.direct, W, M])
 
   return (
     <figure className="fig">
@@ -98,7 +112,9 @@ export default function LineFig({
         className="fig-plot"
         ref={wrapRef}
         onPointerMove={onMove}
-        onPointerLeave={() => setHover(null)}
+        onPointerLeave={clear}
+        onPointerCancel={clear}
+        onPointerUp={clear}
       >
         <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={caption}>
           {/* horizontal gridlines + y ticks */}
@@ -111,7 +127,7 @@ export default function LineFig({
             </g>
           ))}
           {/* x ticks */}
-          {x.ticks(6).map((t) => (
+          {x.ticks(D.xTicks).map((t) => (
             <text key={t} className="tick" x={x(t)} y={H - M.b + 20} textAnchor="middle">
               {fmtX(t)}
             </text>
@@ -134,7 +150,7 @@ export default function LineFig({
 
           {/* direct labels parked in the right margin, de-collided */}
           {directLabels.map((l) => (
-            <g key={l.key} transform={`translate(${labelX},${l.y})`}>
+            <g key={l.key} transform={`translate(${l.x},${l.y})`}>
               <circle r="3" fill={l.color} />
               <text className="direct-label" x="8" dy="0.32em">
                 {l.label}

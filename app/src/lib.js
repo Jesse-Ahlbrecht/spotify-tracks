@@ -21,24 +21,49 @@ export function useData() {
   return data
 }
 
-// ---- scrollytelling: which step is at the "reading line" ------------------
-// The reading line is where a decade comes to rest, as a fraction of viewport height: centred on
-// desktop, lower on mobile where the sticky plane covers the top of the screen. Every consumer
-// derives from this one number — the observer band, useSettleToStep's targets, and
-// scrollToReadingLine — so they cannot drift apart, and CSS never needs to know it.
-const MOBILE = '(max-width: 900px)' // must match the layout switch in index.css
+// ---- breakpoints -----------------------------------------------------------
+// Composed from two arms so the compositions below cannot drift from their parts. Width alone is
+// not enough for MOBILE: a phone in landscape is 932×430, WIDER than 900, and used to get the
+// desktop two-column tree in a 430px-tall window — plane clipped, players below the fold. SHORT is
+// bounded by width so a short-but-wide desktop window keeps the desktop layout.
+// index.css restates these; there is no build-time sharing in plain CSS, so keep the two in step.
+const NARROW = '(max-width: 900px)'
+const SHORT = '(max-height: 500px) and (max-width: 1200px)'
+const MOBILE = `${NARROW}, ${SHORT}`
+// Where the plane gets a full-height slot to fill rather than a leftover: a tall portrait phone,
+// and landscape, where it has a column of its own beside the pages. Its height is otherwise bound
+// by viewBox aspect against available WIDTH, so on a tall screen the leftover is dead space that
+// grows with the screen — measured, 18% of an iPhone SE and 40% of a Pro Max.
+const ROOMY = `(min-height: 780px) and ${NARROW}, ${SHORT}`
+
 const BAND = 6 // half-height of the active band, in % of viewport
-const readingLine = (mobile) => (mobile ? 0.81 : 0.5)
-const isMobile = () => window.matchMedia(MOBILE).matches
-const stepBand = (mobile) => {
-  const line = readingLine(mobile) * 100
-  return `-${line - BAND}% 0px -${100 - line - BAND}% 0px`
+const LINE = 0.5 // the reading line: where a decade comes to rest, as a fraction of the viewport.
+// Was 0.81 on mobile, to clear the sticky plane the stacked layout parked over the captions. A deck
+// page is exactly one viewport tall, so centring it is the same as aligning its top — one number
+// now serves both layouts, and CSS never needs to know it.
+const STEP_BAND = `-${LINE * 100 - BAND}% 0px -${100 - LINE * 100 - BAND}% 0px`
+
+// For the components that render a different TREE either side of a breakpoint rather than just
+// different CSS. Re-renders on rotation, which can cross either query on a phone.
+function useMediaQuery(query) {
+  const [on, setOn] = useState(() => window.matchMedia(query).matches)
+  useEffect(() => {
+    const mql = window.matchMedia(query)
+    const sync = () => setOn(mql.matches)
+    sync()
+    mql.addEventListener('change', sync)
+    return () => mql.removeEventListener('change', sync)
+  }, [query])
+  return on
 }
+
+export const useIsMobile = () => useMediaQuery(MOBILE)
+export const usePlaneRoomy = () => useMediaQuery(ROOMY)
 
 // Where `el` must sit for its midline to land on the reading line.
 const readingLineY = (el) => {
   const r = el.getBoundingClientRect()
-  return Math.round(r.top + window.scrollY + r.height / 2 - window.innerHeight * readingLine(isMobile()))
+  return Math.round(r.top + window.scrollY + r.height / 2 - window.innerHeight * LINE)
 }
 
 // A deliberate jump outranks a settle in progress. useSettleToStep listens for this the same way it
@@ -89,12 +114,14 @@ export function useActiveStep(count) {
             if (e.isIntersecting) setActive(Number(e.target.dataset.step))
           })
         },
-        { rootMargin: stepBand(mql.matches), threshold: 0 },
+        { rootMargin: STEP_BAND, threshold: 0 },
       )
       refs.current.forEach((el) => el && obs.observe(el))
     }
     observe()
-    mql.addEventListener('change', observe) // rotating a phone can cross the breakpoint
+    // Crossing MOBILE swaps the whole Journey subtree, so the observer would be left watching
+    // detached nodes; re-running observe() re-attaches it to the tree that replaced them.
+    mql.addEventListener('change', observe)
     return () => {
       mql.removeEventListener('change', observe)
       obs.disconnect()
@@ -131,7 +158,7 @@ export function useSectionAtLine(selector) {
           })
           setAt(on.size ? Math.min(...on) : -1)
         },
-        { rootMargin: stepBand(mql.matches), threshold: 0 },
+        { rootMargin: STEP_BAND, threshold: 0 },
       )
       els.forEach((el) => obs.observe(el))
     }
@@ -163,8 +190,11 @@ const EDGE = 60 // slack past the first/last decade, after which scrolling is fu
 // off a standstill it lurches.
 const easeInOut = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2)
 
+// `selector` null switches it off — the mobile deck passes null, because full-screen pages settle
+// themselves with CSS scroll-snap and a JS glide on top would be two things steering one scroll.
 export function useSettleToStep(selector) {
   useEffect(() => {
+    if (!selector) return
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     let timer = null
     let raf = null // non-null iff a glide is in flight
@@ -294,9 +324,13 @@ export function useSizeVar(prop, hostSelector) {
     const el = ref.current
     const host = el?.closest(hostSelector)
     if (!el || !host) return
-    const ro = new ResizeObserver(([e]) =>
-      host.style.setProperty(prop, `${Math.round(e.contentRect.height)}px`),
-    )
+    // Border box, not contentRect: consumers use this to clear the measured element, so its own
+    // padding and border have to be in the number. The deck's plane has both, and measuring the
+    // content box alone left the decade heading tucked 19px behind it.
+    const ro = new ResizeObserver(([e]) => {
+      const h = e.borderBoxSize?.[0]?.blockSize ?? el.offsetHeight
+      host.style.setProperty(prop, `${Math.round(h)}px`)
+    })
     ro.observe(el)
     return () => ro.disconnect()
   }, [prop, hostSelector])

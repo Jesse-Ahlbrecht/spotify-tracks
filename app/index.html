@@ -2,7 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover so env(safe-area-inset-*) resolves to real values rather than 0 on a
+         device with a home indicator; .to-top adds it to its bottom offset. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="A scroll-driven journey through 100 years of recorded music's mood." />
     <!-- Warm up connections to Spotify so the per-decade track embeds load faster -->
     <link rel="preconnect" href="https://open.spotify.com" />

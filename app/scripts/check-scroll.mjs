@@ -26,8 +26,6 @@ const check = (name, pass, detail) => {
   console.log(`  ${pass ? '\x1b[32m✓\x1b[0m' : '\x1b[31m✗\x1b[0m'} ${name}${detail ? ` — ${detail}` : ''}`)
 }
 const near = (a, b, tol) => Math.abs(a - b) <= tol
-// readingLine(true) from src/lib.js: where a decade rests on mobile, below the sticky plane.
-const MOBILE_LINE = 0.81
 
 // A trackpad is a stream of many small wheel deltas (a mouse is one big one per notch) — that
 // difference is precisely what broke, so drive real wheel events rather than synthetic ones.
@@ -36,28 +34,35 @@ const trackpad = async (page, dy, steps = 30) => {
   for (let i = 0; i < steps; i++) await page.mouse.wheel(0, dy)
 }
 
-// A finger drag: real touch events through the browser's gesture recognizer.
-const swipe = async (cdp, { x, y, dy, steps = 20 }) => {
-  const pt = (py) => [{ x, y: py, radiusX: 12, radiusY: 12, force: 1, id: 1 }]
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: pt(y) })
+// A finger drag: real touch events through the browser's gesture recognizer. `dy` is travel up the
+// page (a scroll-down flick); `dx` is sideways, for the deck's song carousel.
+const swipe = async (cdp, { x, y, dy = 0, dx = 0, steps = 20 }) => {
+  const pt = (px, py) => [{ x: px, y: py, radiusX: 12, radiusY: 12, force: 1, id: 1 }]
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: pt(x, y) })
   for (let i = 1; i <= steps; i++) {
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: pt(y - (dy * i) / steps) })
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: pt(x + (dx * i) / steps, y - (dy * i) / steps),
+    })
   }
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
 }
 
 const scrollY = (page) => page.evaluate(() => window.scrollY)
+// The reading line from src/lib.js — 0.5 everywhere since the deck landed and retired the 0.81
+// mobile variant that used to clear the sticky plane.
+const LINE = 0.5
 // Park a decade on the reading line. Negative index counts from the end. Mirrors
 // scrollToReadingLine() in src/lib.js rather than calling it — the whole point of a black-box
 // check is that it computes the expected position independently.
-const goToStep = (page, i, line = 0.5) =>
+const goToStep = (page, i) =>
   page.evaluate(
     ({ i, line }) => {
       const r = [...document.querySelectorAll('.step')].at(i).getBoundingClientRect()
       const top = r.top + window.scrollY + r.height / 2 - window.innerHeight * line
       window.scrollTo({ top, behavior: 'instant' })
     },
-    { i, line },
+    { i, line: LINE },
   )
 // Wait until scrolling has actually STOPPED, rather than sleeping a fixed guess. The stillness
 // window must exceed useSettleToStep's IDLE (100ms in lib.js), or this would return in the gap
@@ -101,14 +106,13 @@ const toTop = async (page) => {
 
 // Park a decade on the reading line and wait for the page to stop moving — the pair that opens
 // almost every check below.
-const park = async (page, i, line = 0.5) => {
-  await goToStep(page, i, line)
+const park = async (page, i) => {
+  await goToStep(page, i)
   await settle(page)
 }
 
-// How far the nearest decade is from the reading line it should have come to rest on. `line` is
-// readingLine() from lib.js — 0.5 on desktop, 0.81 on mobile, where the sticky plane sits on top.
-const offBy = (page, line = 0.5) =>
+// How far the nearest decade is from the reading line it should have come to rest on.
+const offBy = (page) =>
   page.evaluate((f) => {
     const at = window.innerHeight * f
     const d = [...document.querySelectorAll('.step')].map((s) => {
@@ -116,7 +120,7 @@ const offBy = (page, line = 0.5) =>
       return Math.abs(r.top + r.height / 2 - at)
     })
     return Math.round(Math.min(...d))
-  }, line)
+  }, LINE)
 
 // ---- decade arrow helpers ---------------------------------------------------
 // Which decade the journey is actually showing, read off the active CAPTION — never off the
@@ -151,6 +155,45 @@ const arrowClearance = (page) =>
     const vGap = Math.round(box('.to-top').top - nav.bottom)
     return { gap, vGap, ok: gap >= 0 && vGap > 0 }
   })
+
+// An svg sized by viewBox alone renders its CSS font sizes as USER units, so text shrinks with the
+// chart — the regression this whole rework exists to fix. Both charts are checked, so measure once.
+const renderedPx = (page, svgSel, textSels) =>
+  page.evaluate(
+    ({ svgSel, textSels }) => {
+      const svg = document.querySelector(svgSel)
+      if (!svg) return null
+      const scale = svg.getBoundingClientRect().width / svg.viewBox.baseVal.width
+      return Object.fromEntries(
+        textSels.map((s) => {
+          const e = document.querySelector(s)
+          return [s, e ? +(parseFloat(getComputedStyle(e).fontSize) * scale).toFixed(1) : null]
+        }),
+      )
+    },
+    { svgSel, textSels },
+  )
+
+// The page the reader is on — not merely one with players, since the ±1 window mounts three.
+const READING = '.deck-page:has(.step-inner.active)'
+
+// The spotlighted decade's label sits beside its dot, and the outermost svg clips by default — so
+// at the decade whose dot is furthest right it used to render as "192". Both geometries flip the
+// label to the dot's left when it would not fit, so check both.
+const labelInsidePlane = async (page, where) => {
+  const m = await page.evaluate(() => {
+    const svg = document.querySelector('.moodspace')
+    const lab = document.querySelector('.ms-now-label')
+    if (!svg || !lab) return null
+    const s = svg.getBoundingClientRect(), l = lab.getBoundingClientRect()
+    return {
+      text: lab.textContent,
+      inside: l.left >= s.left - 1 && l.right <= s.right + 1,
+      detail: `${Math.round(l.left)}..${Math.round(l.right)} within ${Math.round(s.left)}..${Math.round(s.right)}`,
+    }
+  })
+  check(`the decade label is not clipped by the plane's edge (${where})`, !!m && m.inside, `“${m?.text}” ${m?.detail}`)
+}
 
 // Measure a block that should have been scrolled fully into the readable strip, and assert it.
 const clearOfBar = async (page, name, topSel, botSel) => {
@@ -196,6 +239,341 @@ const tabAndDiveIn = async (page, where) => {
     '.step-inner.active',
     '.step-inner.active',
   )
+}
+
+// ---- mobile: the deck ------------------------------------------------------
+// Portrait phones get one decade per screen under a pinned compact plane; landscape puts the plane
+// beside the pages instead, because its scarce axis is height. Both are checked here — the layout
+// differs but every promise below is the same.
+// Spread across the range that actually exists, shortest to tallest. The first cut of the deck was
+// checked at 667 and 700 only — both near the bottom of the range — which hid the fact that a page
+// is one viewport tall while its content is a fixed height, so the leftover grew with the screen:
+// 18% of an SE, 40% of a Pro Max. The tall pair is the guard against that coming back.
+const MOBILE_VIEWPORTS = [
+  { width: 375, height: 667, label: 'mobile 375×667' },
+  { width: 390, height: 844, label: 'mobile 390×844' },
+  { width: 430, height: 932, label: 'mobile 430×932' },
+  { width: 844, height: 390, label: 'landscape 844×390' },
+  // Wider than the 900px width breakpoint but only 430 tall — the case that used to fall through
+  // to the desktop layout in a window far too short for it.
+  { width: 932, height: 430, label: 'landscape 932×430' },
+]
+// Balanced breathing room reads as design; much past this reads as a hole you scroll through.
+const DEAD_SPACE_BUDGET = 0.3
+
+// Scroll a decade page to the top of the viewport — the deck's own resting position, rather than
+// the desktop reading line.
+// Negative counts from the end, so a check about "the last decade" stays about the last decade
+// when the dataset gains one.
+const goToPage = async (page, i) => {
+  await page.evaluate((i) => {
+    const steps = [...document.querySelectorAll('.step')]
+    steps.at(i)?.scrollIntoView({ block: 'start', behavior: 'instant' })
+  }, i)
+  await settle(page)
+}
+
+// The ±1 player window follows the DEBOUNCED active decade, so the page you just landed on gets its
+// players a beat after it gets the caption. Anything measuring them has to wait for that, or it
+// races the debounce — which it lost about one run in three.
+const awaitPlayers = (page) =>
+  page.waitForSelector(`${READING} .embed-list`, { timeout: 5000 }).catch(() => null)
+
+async function runMobile(browser, { width, height, label }) {
+  console.log(`\n\x1b[1m${label} (touch)\x1b[0m`)
+  const ctx = await browser.newContext({
+    viewport: { width, height },
+    hasTouch: true,
+    isMobile: true,
+    deviceScaleFactor: 3,
+  })
+  const mp = await ctx.newPage()
+  const mErrors = []
+  mp.on('pageerror', (e) => mErrors.push(String(e)))
+  await mp.goto(APP_URL, { waitUntil: 'domcontentloaded' })
+  await mp.waitForSelector('.step', { timeout: 15_000 })
+  const cdp = await ctx.newCDPSession(mp)
+  // A flick worth one page, from low on the screen. Sized off the viewport so it means the same
+  // gesture on a 667px phone and a 932px one.
+  const flick = async () => {
+    await swipe(cdp, { x: Math.round(width / 2), y: Math.round(height * 0.8), dy: Math.round(height * 0.6) })
+    await settle(mp)
+  }
+
+  // The story tabs are the first choice the page asks for, so they cannot be below the fold.
+  // Measured before the landscape rework: every tab sat at top: 392px in a 390px-tall viewport.
+  const cue = await mp.evaluate(() => {
+    const box = (s) => document.querySelector(s).getBoundingClientRect()
+    return {
+      h1: box('.hero h1').bottom,
+      tabs: box('.story-toggle').bottom,
+      cueBottom: box('.scroll-cue').bottom,
+      vh: window.innerHeight,
+    }
+  })
+  check(
+    `headline, story tabs and scroll cue are above the fold (${label})`,
+    cue.h1 <= cue.vh && cue.tabs <= cue.vh && cue.cueBottom <= cue.vh,
+    `h1 ends ${Math.round(cue.h1)}px, tabs ${Math.round(cue.tabs)}px, cue ${Math.round(cue.cueBottom)}px of ${cue.vh}px`,
+  )
+
+  // Each opening screen must actually BE a screen. With mandatory snap they are snap points, so a
+  // block shorter than the viewport rests at the top and shows a slice of the next one below it —
+  // which is what a `min-height: 0` left over from an earlier trim did to the landscape hero.
+  const screens = await mp.evaluate(() => {
+    const vh = window.innerHeight
+    const bar = document.querySelector('.topbar').getBoundingClientRect().height
+    return ['.hero', '.journey-intro'].map((s) => {
+      const h = document.querySelector(s).getBoundingClientRect().height
+      return { s, h: Math.round(h), need: Math.round(vh - bar), ok: h >= vh - bar - 2 }
+    })
+  })
+  check(
+    `the hero and explainer each fill a screen (${label})`,
+    screens.every((s) => s.ok),
+    screens.map((s) => `${s.s} ${s.h}px of ${s.need}px`).join(', '),
+  )
+
+  // 44px is the floor for a finger. `.to-top` is not in the list because the deck does not render
+  // it — the check below asserts exactly that.
+  const targets = await mp.evaluate(() => {
+    const small = []
+    for (const el of document.querySelectorAll('.story-seg, .explore-btn')) {
+      const r = el.getBoundingClientRect()
+      if (r.height > 0 && r.height < 44) small.push(`${el.className.split(' ')[0]} ${Math.round(r.height)}px`)
+    }
+    return small
+  })
+  check(`tap targets are at least 44px (${label})`, targets.length === 0, targets.join(', '))
+
+  // Nothing may scroll sideways except the carousel itself.
+  const overflow = await mp.evaluate(() => ({
+    sw: document.documentElement.scrollWidth,
+    cw: document.documentElement.clientWidth,
+  }))
+  check(
+    `no horizontal page overflow (${label})`,
+    overflow.sw <= overflow.cw + 1,
+    `${overflow.sw} > ${overflow.cw}`,
+  )
+
+  // The deck carries no fixed chrome: a swipe is the pager, so the arrows' ~54px gutter buys
+  // nothing, and jump-to-top would float over the songs half of every page.
+  const chromeGone = await mp.evaluate(() => ({
+    arrows: document.querySelector('.decade-arrows') === null,
+    toTop: document.querySelector('.to-top') === null,
+  }))
+  check(
+    `no fixed arrows or jump-to-top on the deck (${label})`,
+    chromeGone.arrows && chromeGone.toTop,
+    `arrows gone: ${chromeGone.arrows}, jump-to-top gone: ${chromeGone.toTop}`,
+  )
+
+  // Touch swipe must scroll at all — there is no wheel event on a phone.
+  await toTop(mp)
+  const mBefore = await scrollY(mp)
+  await flick()
+  const mMoved = (await scrollY(mp)) - mBefore
+  check(`touch swipe scrolls the page (${label})`, mMoved > 150, `moved ${Math.round(mMoved)}px`)
+
+  // The promise of the deck: a decade, its caption and its songs on one screen at once. This is
+  // what the stacked layout could not do — measured, the caption ran off the bottom every time.
+  await goToPage(mp, 3)
+  await awaitPlayers(mp)
+  const pg = await mp.evaluate((READING) => {
+    const vh = window.innerHeight
+    const page = document.querySelector(READING) ?? document.querySelector('.deck-page')
+    const q = (s) => page?.querySelector(s)?.getBoundingClientRect()
+    // "On screen" has to mean clear of the sticky chrome, not merely below y=0: a heading at
+    // top: 4px is on screen by coordinates and invisible in fact, which is how a clipped decade
+    // heading slipped past this check once. But the plane only occludes when it is ABOVE the
+    // content — in landscape it sits beside it, and then the topbar is the only thing overhead.
+    // The plot itself, not its container: side by side the container is stretched to the full band
+    // by design, so measuring it would make the emptiness check below pass trivially.
+    const planeBox = document.querySelector('.moodspace')?.getBoundingClientRect()
+    const pageBox = page?.getBoundingClientRect()
+    const sideBySide = !!planeBox && !!pageBox && planeBox.right <= pageBox.left + 1
+    const chrome = sideBySide
+      ? document.querySelector('.topbar').getBoundingClientRect().bottom
+      : (planeBox?.bottom ?? 0)
+    const on = (r) => !!r && r.top >= chrome - 1 && r.bottom <= vh
+    const dec = q('.step-decade'), cap = q('.step-inner p'), list = q('.embed-list')
+    const tail = q('.embed-dots') ?? list
+    return {
+      vh,
+      chrome: Math.round(chrome),
+      decade: page?.querySelector('.step-decade')?.textContent,
+      decOn: on(dec), capOn: on(cap), listOn: on(list),
+      where: [dec, cap, list].map((r) => (r ? `${Math.round(r.top)}..${Math.round(r.bottom)}` : 'none')).join(' '),
+      // Empty page above the first thing on it and below the last — what a reader scrolls through.
+      // Side by side, the plane counts as content: it fills its own column, so a gap beside it is
+      // not an empty screen. Measuring only the text column would call a full page 36% empty.
+      gapAbove: dec ? Math.round(Math.min(dec.top, sideBySide ? planeBox.top : dec.top) - chrome) : null,
+      gapBelow: tail && pageBox
+        ? Math.round(pageBox.bottom - Math.max(tail.bottom, sideBySide ? planeBox.bottom : tail.bottom))
+        : null,
+    }
+  }, READING)
+  check(
+    `decade, caption and songs are all clear of the plane and on screen (${label})`,
+    pg.decOn && pg.capOn && pg.listOn,
+    `${pg.decade}: decade/caption/songs at ${pg.where}; plane ends ${pg.chrome}px, vh ${pg.vh}px`,
+  )
+
+  const dead = (pg.gapAbove ?? 0) + (pg.gapBelow ?? 0)
+  check(
+    `a decade page is not mostly empty (${label})`,
+    dead <= pg.vh * DEAD_SPACE_BUDGET,
+    `${pg.gapAbove}px above + ${pg.gapBelow}px below = ${dead}px, ` +
+      `${Math.round((dead / pg.vh) * 100)}% of ${pg.vh}px (budget ${DEAD_SPACE_BUDGET * 100}%)`,
+  )
+
+  // The regression that shipped: the plane sizes by viewBox alone, so its CSS font sizes are user
+  // units. At the old 560-wide geometry a 13px tick rendered at ~7px on this screen.
+  const textPx = await renderedPx(mp, '.moodspace', ['.ms-tick', '.ms-axis-title'])
+  check(
+    `plane text renders at a legible size (${label})`,
+    textPx && textPx['.ms-tick'] >= 9,
+    `tick ${textPx?.['.ms-tick']}px, axis title ${textPx?.['.ms-axis-title']}px rendered`,
+  )
+
+  // Decade 0 is the mood journey's rightmost dot — the case that clipped.
+  await goToPage(mp, 0)
+  await labelInsidePlane(mp, label)
+  await goToPage(mp, 3)
+  await awaitPlayers(mp)
+
+  // All three songs reachable — the stacked layout hid tracks 2 and 3 outright — and reachable by
+  // the gesture the layout advertises, without dragging the page with them.
+  const carousel = await mp.evaluate((READING) => {
+    const el = document.querySelector(`${READING} .embed-list`)
+    if (!el) return null
+    const r = el.getBoundingClientRect()
+    return {
+      tracks: el.querySelectorAll('iframe').length,
+      scrollable: el.scrollWidth > el.clientWidth + 5,
+      cx: Math.round(r.left + r.width / 2),
+      cy: Math.round(r.top + r.height / 2),
+    }
+  }, READING)
+  check(
+    `all three songs are present and swipeable (${label})`,
+    carousel && carousel.tracks === 3 && carousel.scrollable,
+    `${carousel?.tracks} players, scrollable: ${carousel?.scrollable}`,
+  )
+  if (carousel) {
+    const yBefore = await scrollY(mp)
+    await swipe(cdp, { x: carousel.cx, y: carousel.cy, dx: -Math.round(width * 0.65) })
+    await mp.waitForTimeout(900)
+    const after = await mp.evaluate((READING) => {
+      // Scoped to the page being read: the ±1 window mounts three carousels, and an unscoped
+      // query reads the previous decade's dots, which have not moved.
+      const pg = document.querySelector(READING)
+      return {
+        left: Math.round(pg.querySelector('.embed-list').scrollLeft),
+        y: Math.round(window.scrollY),
+        dot: [...pg.querySelectorAll('.embed-dot')].findIndex((d) => d.classList.contains('on')),
+      }
+    }, READING)
+    // Which song it lands on depends on momentum against track width, so assert the promise —
+    // a sideways swipe reaches a later song and leaves the page where it was — not an index.
+    check(
+      `sideways swipe reaches another song without scrolling the page (${label})`,
+      after.left > 50 && after.dot >= 1 && Math.abs(after.y - yBefore) < 12,
+      `scrollLeft ${after.left}px, now on song ${after.dot + 1}, page moved ${Math.abs(after.y - yBefore)}px`,
+    )
+  }
+
+  // A ±1 decade window: three decades × three tracks. Mounting only the current decade was tried
+  // and reverted — its players then load as you arrive, which reads as the embed blanking out
+  // mid-scroll. This is the ceiling, so a wider window cannot creep back in unnoticed.
+  const frames = await mp.evaluate(() => document.querySelectorAll('.embed-list iframe').length)
+  check(`the player window stays at ±1 decade (${label})`, frames <= 9, `${frames} iframes`)
+
+  // A swipe down moves exactly one decade — no skipping, no sticking.
+  const dBefore = await activeDecade(mp)
+  await flick()
+  const dAfter = await activeDecade(mp)
+  check(
+    `a swipe advances exactly one decade (${label})`,
+    dAfter === dBefore + 10,
+    `${dBefore}s → ${dAfter}s`,
+  )
+
+  if (SHOTS) await mp.screenshot({ path: `${SHOT_DIR}/deck-${width}x${height}.png` })
+
+  // Mandatory snap's failure mode: nothing past the last decade is a snap point, so the scroller
+  // refuses to rest there and drags the reader back. Swipe hard off the end and check the page
+  // actually stays down — and that the footer's bottom is reachable at all.
+  await goToPage(mp, -1)
+  const endY = await scrollY(mp)
+  for (let i = 0; i < 4; i++) await flick()
+  const past = await mp.evaluate(() => ({
+    y: Math.round(window.scrollY),
+    max: Math.round(document.documentElement.scrollHeight - window.innerHeight),
+    footerSeen: (() => {
+      const f = document.querySelector('.footer')?.getBoundingClientRect()
+      return !!f && f.top < window.innerHeight
+    })(),
+  }))
+  check(
+    `can scroll past the last decade to the footer (${label})`,
+    past.y > endY + 100 && past.footerSeen,
+    `${endY} → ${past.y} of ${past.max}, footer in view: ${past.footerSeen}`,
+  )
+  await goToPage(mp, 3)
+  await awaitPlayers(mp)
+
+  // The touch-action fix: a swipe starting ON the coda chart must still scroll the page.
+  await mp.evaluate(() => document.querySelector('.beat')?.scrollIntoView({ block: 'center', behavior: 'instant' }))
+  await settle(mp)
+  const chart = await mp.evaluate(() => {
+    const el = document.querySelector('.fig-plot svg')
+    if (!el) return null
+    const r = el.getBoundingClientRect()
+    return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2), ta: getComputedStyle(el).touchAction }
+  })
+  if (chart) {
+    check(`coda chart allows vertical panning (${label})`, chart.ta === 'pan-y', `touch-action: ${chart.ta}`)
+    // Same viewBox-text trap as the plane: the wide geometry rendered these at ~5px, and spent a
+    // 120-unit right margin on direct labels the HTML legend above already duplicates.
+    const figText = await renderedPx(mp, '.fig-plot svg', ['.tick'])
+    const named = await mp.evaluate(() => ({
+      direct: document.querySelectorAll('.direct-label').length,
+      legend: document.querySelectorAll('.fig-legend .legend-item').length,
+    }))
+    check(
+      `coda chart text is legible and its series are still named (${label})`,
+      figText['.tick'] >= 9 && named.direct === 0 && named.legend >= 2,
+      `tick ${figText['.tick']}px, ${named.direct} svg labels, ${named.legend} legend entries`,
+    )
+    const cBefore = await scrollY(mp)
+    await swipe(cdp, { x: chart.x, y: chart.y, dy: 300 })
+    await settle(mp)
+    const cMoved = (await scrollY(mp)) - cBefore
+    check(`swipe starting on the coda chart scrolls the page (${label})`, cMoved > 100, `moved ${Math.round(cMoved)}px`)
+  }
+
+  await tabAndDiveIn(mp, label)
+
+  // The one thing emulation cannot do on its own: a phone's URL bar collapses as you scroll, which
+  // re-resolves every dvh unit and reflows the page under an animating jump. Growing the viewport
+  // mid-scroll is the closest stand-in — the jump must still land its target.
+  await toTop(mp)
+  await mp.getByRole('tab', { name: 'The beat' }).click()
+  await mp.waitForTimeout(80)
+  await mp.setViewportSize({ width, height: height + 60 })
+  await settle(mp)
+  await clearOfBar(
+    mp,
+    `a jump survives the URL bar collapsing mid-scroll (${label})`,
+    '.journey-intro h2',
+    '.journey-intro h2',
+  )
+  await mp.setViewportSize({ width, height })
+
+  check(`no page errors (${label})`, mErrors.length === 0, mErrors.slice(0, 3).join(' | '))
+  await ctx.close()
 }
 
 async function main() {
@@ -328,6 +706,9 @@ async function main() {
     return closest.active
   })
   check('the caption on the plane midline is the active one', activeIsOnPlane)
+
+  await park(page, 0)
+  await labelInsidePlane(page, 'desktop')
 
   // ---- decade arrows: stepping without scrolling --------------------------
   // They must float over the journey and nothing else, land exactly where a scroll would have
@@ -545,130 +926,10 @@ async function main() {
   check('no console/page errors (desktop)', errors.length === 0, errors.slice(0, 3).join(' | '))
 
   // ----------------------------------------------------------------- mobile
-  console.log('\n\x1b[1mMobile 390×700 (touch)\x1b[0m')
-  const mobile = await browser.newContext({
-    viewport: { width: 390, height: 700 },
-    hasTouch: true,
-    isMobile: true,
-    deviceScaleFactor: 3,
-  })
-  const mp = await mobile.newPage()
-  const mErrors = []
-  mp.on('pageerror', (e) => mErrors.push(String(e)))
-  await mp.goto(APP_URL, { waitUntil: 'domcontentloaded' })
-  await mp.waitForSelector('.step', { timeout: 15_000 })
-  const mcdp = await mobile.newCDPSession(mp)
-
-  // The hero must fit the visible viewport: the 100vh → 100dvh fix, the mobile type/padding trim,
-  // and `min-height: calc(100dvh - var(--topbar))` — without that last one the hero runs a full
-  // topbar taller than the screen and the cue, parked at its bottom edge, falls under the fold.
-  // All three are asserted now; the cue used to trail below and be merely reported.
-  const cue = await mp.evaluate(() => {
-    const box = (s) => document.querySelector(s).getBoundingClientRect()
-    return {
-      h1: box('.hero h1').bottom,
-      tabs: box('.story-toggle').bottom,
-      cueBottom: box('.scroll-cue').bottom,
-      vh: window.innerHeight,
-    }
-  })
-  check(
-    'headline, story tabs and scroll cue are above the fold (mobile)',
-    cue.h1 <= cue.vh && cue.tabs <= cue.vh && cue.cueBottom <= cue.vh,
-    `h1 ends ${Math.round(cue.h1)}px, tabs ${Math.round(cue.tabs)}px, cue ${Math.round(
-      cue.cueBottom,
-    )}px of ${cue.vh}px`,
-  )
-
-  // Touch swipe must scroll at all — there is no wheel event on a phone.
-  await mp.evaluate(() => window.scrollTo(0, 0))
-  await settle(mp)
-  const mBefore = await scrollY(mp)
-  await swipe(mcdp, { x: 195, y: 600, dy: 420 })
-  await settle(mp)
-  const mMoved = (await scrollY(mp)) - mBefore
-  check('touch swipe scrolls the page', mMoved > 200, `moved ${Math.round(mMoved)}px`)
-
-  // Settling has to work off a finger too, against the mobile reading line (below the plane).
-  await park(mp, 3, MOBILE_LINE)
-  await swipe(mcdp, { x: 195, y: 600, dy: 260 })
-  await settle(mp)
-  const mOff = await offBy(mp, MOBILE_LINE)
-  check('touch swipe settles onto a decade', mOff < 16, `came to rest ${mOff}px off a decade`)
-
-  // The sticky graphic must leave room for a caption.
-  await park(mp, 4, MOBILE_LINE)
-  const layout = await mp.evaluate(() => {
-    const g = document.querySelector('.journey-graphic').getBoundingClientRect()
-    const a = document.querySelector('.step-inner.active')?.getBoundingClientRect()
-    return {
-      vh: window.innerHeight,
-      graphicBottom: g.bottom,
-      graphicH: g.height,
-      capTop: a?.top,
-      capBottom: a?.bottom,
-    }
-  })
-  check(
-    'sticky graphic leaves room for captions',
-    layout.graphicH < layout.vh * 0.62,
-    `graphic ${Math.round(layout.graphicH)}px of ${layout.vh}px (${Math.round((layout.graphicH / layout.vh) * 100)}%)`,
-  )
-  check(
-    'active caption sits below the graphic, fully on screen',
-    layout.capTop >= layout.graphicBottom - 4 && layout.capBottom <= layout.vh,
-    `caption ${Math.round(layout.capTop)}–${Math.round(layout.capBottom)}px, graphic ends ${Math.round(layout.graphicBottom)}px, vh ${layout.vh}px`,
-  )
-  // The sticky plane pins below the topbar; if the topbar is taller than that offset the
-  // plane's top gets clipped behind it.
-  const clip = await mp.evaluate(() => {
-    const bar = document.querySelector('.topbar').getBoundingClientRect()
-    const plane = document.querySelector('.moodspace').getBoundingClientRect()
-    return { barBottom: bar.bottom, planeTop: plane.top }
-  })
-  check(
-    'sticky plane is not clipped by the topbar',
-    clip.planeTop >= clip.barBottom - 1,
-    `plane top ${Math.round(clip.planeTop)}px, topbar ends ${Math.round(clip.barBottom)}px`,
-  )
-  const mClear = await arrowClearance(mp)
-  check(
-    'arrows clear the caption text and jump-to-top (mobile)',
-    mClear.ok,
-    `${mClear.gap}px past the caption, ${mClear.vGap}px above .to-top`,
-  )
-
-  const mFrom = await activeDecade(mp)
-  await arrow(mp, 'Next step').click()
-  await settle(mp)
-  const mTo = await activeDecade(mp)
-  const mOffStep = await offBy(mp, MOBILE_LINE)
-  check(
-    'the down arrow steps one decade (mobile)',
-    mTo === mFrom + 10 && mOffStep < 16,
-    `${mFrom}s → ${mTo}s, ${mOffStep}px off`,
-  )
-
-  if (SHOTS) await mp.screenshot({ path: `${SHOT_DIR}/mobile-journey.png` })
-
-  // The touch-action fix: a swipe starting ON the coda chart must still scroll the page.
-  await mp.evaluate(() => document.querySelector('.beat')?.scrollIntoView({ block: 'center', behavior: 'instant' }))
-  await settle(mp)
-  const chart = await mp.evaluate(() => {
-    const r = document.querySelector('.fig-plot svg').getBoundingClientRect()
-    const ta = getComputedStyle(document.querySelector('.fig-plot svg')).touchAction
-    return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2), ta }
-  })
-  check('coda chart allows vertical panning', chart.ta === 'pan-y', `touch-action: ${chart.ta}`)
-  const cBefore = await scrollY(mp)
-  await swipe(mcdp, { x: chart.x, y: chart.y, dy: 300 })
-  await settle(mp)
-  const cMoved = (await scrollY(mp)) - cBefore
-  check('swipe starting on the coda chart scrolls the page', cMoved > 150, `moved ${Math.round(cMoved)}px`)
-
-  await tabAndDiveIn(mp, 'mobile')
-
-  check('no page errors (mobile)', mErrors.length === 0, mErrors.slice(0, 3).join(' | '))
+  // Sequential, not parallel: these drive real touch gestures and assert on settle timings, so
+  // five contexts competing for CPU would trade ~45s of wall clock for flakes in the checks most
+  // worth trusting. See MOBILE_VIEWPORTS for why the list spans the range it does.
+  for (const vp of MOBILE_VIEWPORTS) await runMobile(browser, vp)
 
   await browser.close()
 

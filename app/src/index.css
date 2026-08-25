@@ -22,10 +22,16 @@
   /* Height of the sticky topbar. Full-height sections sit BELOW it, so `100dvh` overshoots the
      visible area by exactly this much — subtract it or their last line falls under the fold. */
   --topbar: 72px;
+  /* One screen below the bar — the deck's unit. svh, not dvh: a box that changes height as the
+     mobile URL bar collapses reflows the page under the reader mid-swipe. */
+  --screen: calc(100svh - var(--topbar));
   /* Size and edge offset of the fixed decade arrows. Here rather than on .decade-arrows because
      the journey's right gutter is derived from them, and a child cannot publish upwards. */
   --arrow-size: 48px;
   --arrow-inset: 14px;
+  /* The Spotify embed's height, shared with the slot that reserves room for it on a deck page —
+     they have to agree or the page changes shape when the players load. */
+  --player-h: 80px;
 }
 
 * { box-sizing: border-box; }
@@ -162,16 +168,17 @@ em { font-style: normal; color: var(--accent); transition: color 0.3s ease; }
   cursor: pointer;
   transition: color 0.2s ease, background 0.2s ease;
 }
-.story-seg:hover { color: var(--ink); }
 .story-seg.active { background: var(--seg-accent, var(--accent)); color: #fff; }
 
 /* ---- jump-to-top (fixed, bottom-right; fades in after you scroll) ---- */
 .to-top {
   position: fixed;
   right: 22px;
-  bottom: 22px;
+  /* env() past the home indicator on a notched phone; the fallback is the plain inset. */
+  bottom: calc(22px + env(safe-area-inset-bottom, 0px));
   z-index: 30;
-  padding: 8px 14px;
+  min-height: 44px;
+  padding: 11px 16px;
   font: inherit;
   font-size: 0.8rem;
   font-weight: 600;
@@ -198,7 +205,21 @@ em { font-style: normal; color: var(--accent); transition: color 0.3s ease; }
   visibility: visible;
   transition-delay: 0s;
 }
-.to-top:hover { color: var(--accent); border-color: var(--accent); }
+
+/* Hover styling only where a pointer can actually hover. On touch these latch after a tap — the
+   control keeps its hover colour until you press something else, which reads as stuck state.
+   Focus-visible carries the same affordance for keyboards, which the stylesheet had nowhere. */
+@media (hover: hover) {
+  .story-seg:hover { color: var(--ink); }
+  .to-top:hover { color: var(--accent); border-color: var(--accent); }
+  .explore-btn:hover { color: var(--accent); border-color: var(--accent); }
+  .decade-arrow:not([aria-disabled='true']):hover { color: var(--accent); }
+}
+:where(button, a, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 8px;
+}
 
 /* ---- decade arrows (fixed, right edge; step a decade without scrolling) ---- */
 /* Two chevrons in the margin and nothing else — no card, no pill, no backdrop. This sits on screen
@@ -239,7 +260,6 @@ em { font-style: normal; color: var(--accent); transition: color 0.3s ease; }
 /* aria-disabled, not :disabled — see the note in DecadeArrows.jsx: the real attribute kills the
    in-flight smooth scroll the press just started. */
 .decade-arrow[aria-disabled='true'] { opacity: 0.22; cursor: default; }
-.decade-arrow:not([aria-disabled='true']):hover { color: var(--accent); }
 .decade-arrow svg {
   width: calc(var(--arrow-size) * 0.71);
   height: calc(var(--arrow-size) * 0.71);
@@ -256,7 +276,7 @@ em { font-style: normal; color: var(--accent); transition: color 0.3s ease; }
   /* svh, not dvh: this section sits mid-page, above the steps. dvh re-resolves as the mobile URL
      bar collapses, which would reflow every step below it mid-scroll — the hazard the .hero note
      above rules out. svh is static and errs toward "fits with the bar showing". */
-  min-height: calc(100svh - var(--topbar));
+  min-height: var(--screen);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -309,9 +329,12 @@ em { font-style: normal; color: var(--accent); transition: color 0.3s ease; }
 .step-inner p { color: var(--ink-2); font-size: 1.08rem; margin: 0.3em 0 0; }
 
 /* The card: every raised surface in the app (the plane, the players, the charts, the dials).
-   Each of those keeps only its own padding/position below. */
+   Each of those keeps only its own padding/position below.
+   `.embed-plain` opts out — on a deck page each Spotify player is already a rounded card of its
+   own, so this would wrap a card in a card. Opted out at the source rather than undone by eight
+   overrides in the mobile block. */
 .moodspace,
-.embed,
+.embed:not(.embed-plain),
 .fig-plot,
 .dial {
   background: var(--surface);
@@ -335,6 +358,12 @@ em { font-style: normal; color: var(--accent); transition: color 0.3s ease; }
 .ms-now-core { fill: var(--accent); }
 .ms-now-halo { fill: var(--accent); opacity: 0.18; }
 .ms-now-label { fill: var(--ink); font-weight: 700; font-size: 15px; }
+/* The compact geometry renders at roughly 1 user unit per CSS px, so these ARE the rendered sizes
+   — trimmed a little from the wide plane's, which would crowd a 320-unit box. */
+.moodspace.compact .ms-tick { font-size: 12px; }
+.moodspace.compact .ms-axis { font-size: 13px; }
+.moodspace.compact .ms-axis-title { font-size: 14px; }
+.moodspace.compact .ms-now-label { font-size: 13px; }
 
 /* ---- embed ---- */
 /* Neighbouring decades' players stay mounted and painted (never display:none, which would
@@ -358,7 +387,20 @@ em { font-style: normal; color: var(--accent); transition: color 0.3s ease; }
 }
 .embed-caption { font-size: 0.85rem; color: var(--ink-2); margin-bottom: 8px; }
 .embed-list { display: flex; flex-direction: column; gap: 8px; }
-.embed iframe { border-radius: 10px; display: block; }
+/* Height from the token, not an iframe attribute — the deck's .embed-slot reserves room for these
+   and the two have to agree. */
+.embed iframe { border-radius: 10px; display: block; height: var(--player-h); }
+/* Position in the mobile carousel. Decorative — every player is reachable by swiping, and the
+   players themselves are the content, so this is aria-hidden in TrackEmbed. */
+.embed-dots { display: flex; justify-content: center; gap: 7px; margin-top: 10px; }
+.embed-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--border);
+  transition: background 0.25s ease;
+}
+.embed-dot.on { background: var(--accent); }
 
 /* ---- standalone beats ---- */
 .beat {
@@ -423,7 +465,6 @@ figcaption { margin-top: 10px; color: var(--ink-2); font-size: 0.9rem; max-width
   cursor: pointer;
   transition: color 0.2s ease, border-color 0.2s ease;
 }
-.explore-btn:hover { color: var(--accent); border-color: var(--accent); }
 
 .footer { max-width: 860px; margin: 0 auto; padding: 8vh 24px 16vh; border-top: 1px solid var(--border); }
 .footer p { color: var(--ink-2); }
@@ -435,76 +476,265 @@ figcaption { margin-top: 10px; color: var(--ink-2); font-size: 0.9rem; max-width
    alone clears them (190px at 1512px, so nothing fires there); below that the column gives up the
    width. A static gutter, not a reflow — nothing here ever moves in response to hover or to which
    decade is active. The 1280px bound has to stay a literal: media queries cannot test a custom
-   property. 901px is the `MOBILE` breakpoint from lib.js — keep the two in step. */
+   property.
+   Scoped by `:has(.decade-arrows)` rather than a second height arm: the gutter's real predicate is
+   "are the arrows on the page", which is a DOM fact now that Journey's deck branch simply does not
+   render them. A hand-written `(min-height: 501px)` tried to say the same thing and left a hole —
+   it was bounded at 1280px while the deck's own SHORT query stops at 1200px, so a 1250×430 window
+   got the desktop tree WITH arrows and no gutter for them. */
 @media (min-width: 901px) and (max-width: 1280px) {
   /* The explainer too: the arrows float over it as well, so its prose needs the same clearance.
      Its own 860px cap already covers it above ~950px, but folding it into this rule beats a third
      breakpoint — the cost is the text block sitting ~25px left of centre, which does not read. */
-  .journey,
-  .journey-intro { padding-right: calc(var(--arrow-size) + var(--arrow-inset) + 12px); }
+  body:has(.decade-arrows) .journey,
+  body:has(.decade-arrows) .journey-intro {
+    padding-right: calc(var(--arrow-size) + var(--arrow-inset) + 12px);
+  }
 }
 
-/* Mobile turns the two-column layout into a stack: the graphic pins across the top, captions
-   scroll underneath it. That only reads if the graphic leaves room — unconstrained, the plane
-   plus three Spotify players fill a phone screen entirely and no caption is ever visible. So the
-   plane is capped (below) and the caption band gets the rest. */
-@media (max-width: 900px) {
-  /* The asymmetric padding is the caption column's clearance for the decade arrows, derived from
-     their size the same way the desktop gutter is. */
-  .journey { display: block; padding: 0 calc(var(--arrow-size) + var(--arrow-inset) + 6px) 0 16px; }
+/* ---- mobile: the deck ----
+   Not the two-column layout stacked. Squeezing it asked one 700px screen to hold the plane, a
+   player AND a caption; measured, the sticky block took 56% of the screen and the caption fell
+   off the bottom. So each decade gets a screen of its own, under one pinned compact plane:
+   swipe down for the next decade, sideways for that decade's other songs.
+   Rendered by the `mobile` branch of Journey.jsx — this styles a different tree, not the same
+   one reflowed, so most desktop rules below simply do not apply. */
+/* Keep this selector in step with MOBILE in lib.js — the two decide the same thing, and the JS one
+   picks which tree renders while this one styles it. The height arm catches landscape phones, which
+   are wider than 900px and have no business getting the desktop layout. */
+@media (max-width: 900px), (max-height: 500px) and (max-width: 1200px) {
   /* Compact topbar so the brand and tagline each stay on one line — wrapped to two it grew to
-     ~90px, overflowing the sticky offset below and clipping the plane's top edge. */
+     ~90px, overflowing the sticky offset below and clipping the plane's top edge.
+     No --arrow-* here: the deck drops the arrows (a swipe is the pager), which gives the prose
+     back the ~54px right gutter they cost. */
   .topbar { padding: 12px 16px; }
-  /* Keeps the full-height sections' `100dvh − topbar` honest against the compact bar above.
-     Smaller arrows tucked closer to the edge: phone width is the scarce resource here, and the
-     gutter above tracks these two automatically. */
-  :root { --topbar: 52px; --arrow-size: 42px; --arrow-inset: 6px; }
+  :root { --topbar: 52px; }
   .brand { font-size: 1.05rem; }
   .topbar-sub { font-size: 0.8rem; }
-  .journey-graphic {
+
+  .deck { display: block; max-width: none; padding: 0; }
+  /* Pinned under the topbar, so the plane is on screen for every decade. Opaque and z-raised
+     because the pages scroll beneath it. */
+  .deck-plane {
     position: sticky;
     top: var(--topbar);
-    min-height: 0;
-    justify-content: flex-start;
-    background: var(--page);
-    padding: 10px 0;
     z-index: 5;
+    padding: 8px 16px 10px;
+    background: var(--page);
     border-bottom: 1px solid var(--border);
   }
-  /* The plane is the only variable-height child, so capping it caps the whole sticky block —
-     without a max-height on the block itself, which would let the player spill past its border
-     onto the captions. viewBox + default preserveAspectRatio means this letterboxes with side
-     gutters rather than distorting. */
-  .moodspace { max-height: 28dvh; }
-  /* One player, not three. The "never display:none" note on .embed above is about the
-     cross-fading containers un-painting on reveal; tracks 2-3 are simply never shown here. */
-  .embed-list iframe:not(:first-child) { display: none; }
-  .journey-steps { padding: 0; }
-  .story-seg { flex: 1 1 40%; white-space: normal; }
-  /* Stacked layout: the plane is above the captions, not beside them — nothing to align to. */
-  .journey { --caption-lift: 0px; }
-  /* Shorter so the step fits the caption strip below the sticky plane. */
-  .step { min-height: 54vh; }
+  /* One decade, one screen. svh not dvh: a page that changes height as the URL bar collapses
+     would reflow the deck under the reader mid-swipe — the same reason .journey-intro uses it.
+     The top padding is the sticky stack's own height (measured as --plane-h by useSizeVar), so
+     a page's content starts below the plane rather than behind it. */
+  .deck-page {
+    /* Minus the topbar, because scroll-padding-top now parks the page below it — the page occupies
+       the visible band, not the whole viewport. Its own padding only has to clear the plane. */
+    min-height: var(--screen);
+    /* The fallback only covers the frame before useSizeVar's ResizeObserver reports, so it is a
+       plausible middle of the measured range (254px at 390 wide, 380px at 430) rather than exact. */
+    padding: calc(var(--plane-h, 300px) + 14px) 20px 3vh;
+    scroll-snap-align: start;
+    /* A hard flick would otherwise sail past two or three decades — measured, one swipe on a 667px
+       screen went 1950s → 1970s. `always` forbids the scroll passing a snap point, so a swipe is
+       worth exactly one decade however hard you throw it. */
+    scroll-snap-stop: always;
+    display: flex;
+    flex-direction: column;
+    /* Centred in the band below the plane, not top-aligned: a page is taller than its content, and
+       top-aligning pooled the whole difference into one slab of white at the bottom. */
+    justify-content: center;
+    gap: 14px;
+  }
+  /* Reserves the players' height whether or not they are mounted, so a page is the same shape
+     before and after they load — otherwise every decade you are not parked on collapses to a
+     caption and leaves ~220px empty. Player + dots (10px margin + 7px) + slack, derived from
+     --player-h rather than hand-matched to a height attribute in TrackEmbed.jsx. */
+  .deck-page .embed-slot { min-height: calc(var(--player-h) + 24px); }
+  /* Mandatory, not proximity. Proximity let a scroll rest anywhere, and "anywhere" on a deck page
+     means the caption half-hidden under the sticky plane — the page only clears the plane at its
+     snapped position. Mandatory is safe here only because the coda and footer are snap points too
+     (below): without them it would refuse to rest inside either and trap the reader at the last
+     decade, which is the dead end the whole scroll rework exists to avoid. Guarded by
+     "can scroll past the last decade to the footer" in check-scroll.
+     scroll-padding-top is the other half of the same decision: snap aligns a block's top with the
+     top of the SCROLLPORT, which is behind the sticky topbar, so without it every screen parks a
+     topbar too high with its first line under the bar — and every full-height block, sized one
+     --screen, ends a topbar short of the bottom with the scroll cue stranded mid-screen. One
+     number clears the bar for snapping, and no block below needs to pad for it itself. */
+  html {
+    scroll-snap-type: y mandatory;
+    scroll-padding-top: var(--topbar);
+  }
+  /* EVERY full-screen block, not just the deck pages. Mandatory means the scroller must rest on a
+     snap point, so anything without one gets pushed off — the hero has no snap point of its own and
+     was snapped away the instant you touched the page, taking the story tabs with it. The coda and
+     footer are taller than a phone screen, which the spec allows to scroll freely once entered. */
+  .hero,
+  .journey-intro,
+  .beat,
+  .footer { scroll-snap-align: start; }
+  /* `translate: none` drops the caption lift outright — the plane is above the caption here, not
+     beside it, so there is nothing to align to. And no dimming: one page is on screen at a time, so
+     a "which is active" cue has nothing to contrast against. */
+  .deck-page .step-inner { opacity: 1; translate: none; border-left: 0; padding-left: 0; }
+  .deck-page .step-inner p { font-size: 1rem; }
+  /* Back in flow: the absolute positioning above exists for the desktop stack's cross-fade, and a
+     deck page has one player group, not three overlaid. (The card itself is opted out at source via
+     .embed-plain — see the shared surface rule.) */
+  .deck-page .embed { position: relative; opacity: 1; pointer-events: auto; padding: 0; }
+  /* The songs, side by side in a snapping track. No touch-action override: the browser's own
+     direction locking already picks pan-x here, and pinning it would kill vertical scrolling over
+     most of the screen — the mistake .fig-plot made with `none`. */
+  .deck-page .embed-list {
+    flex-direction: row;
+    gap: 12px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .deck-page .embed-list::-webkit-scrollbar { display: none; }
+  .deck-page .embed-list iframe { flex: 0 0 100%; scroll-snap-align: center; }
+
+  /* One column, not a 2×2 grid. Wrapping four tabs into a grid gave two ragged rows whose pills
+     were all different widths, and the selected one read as a stray pill rather than one of a set.
+     Stacked, every choice is the same shape and full width — and a thumb has a whole row to hit. */
+  .story-seg {
+    flex: 1 1 auto;
+    white-space: normal;
+    min-height: 44px; /* asserted by the tap-target check — keep any padding change above this */
+    padding: 11px 18px;
+    font-size: 0.9rem;
+  }
   /* Tighten the hero so the headline and story tabs fit a phone screen — at desktop sizing it
      ran ~900px against a 700px viewport. */
-  .hero { padding: 4vh 20px 2vh; }
-  .hero h1 { font-size: clamp(2rem, 7.5vw, 3rem); margin: 0.25em 0; }
-  .hero-lede { margin-top: 0.9em; }
+  .hero { padding: 2vh 20px 1.5vh; }
+  .hero h1 { font-size: clamp(1.9rem, 7vw, 2.8rem); margin: 0.2em 0; }
+  .hero-lede { margin-top: 0.7em; }
   .hero-lede,
-  .journey-intro .lede { font-size: 0.98rem; line-height: 1.5; }
-  .story-toggle { flex-wrap: wrap; border-radius: 18px; margin-top: 1.1rem; }
-  /* Top-aligned, not centred: centring a screen-tall block puts its first line behind the
-     sticky topbar even after the min-height correction. The rest of this block is a budget —
-     the dive-in button is the point of the screen and has to stay reachable on a 700px phone. */
+  .journey-intro .lede { font-size: 0.94rem; line-height: 1.4; }
+  .scroll-cue { padding-top: 0.5rem; }
+  .story-toggle {
+    flex-direction: column;
+    border-radius: 22px;
+    margin-top: 0.9rem;
+    padding: 4px;
+    gap: 4px;
+    /* The hero is a flex column and the toggle's `margin: … auto` centres it at content width,
+       which as a column is just the longest label — narrower than the prose above it. */
+    width: 100%;
+  }
+  /* Two lines at the desktop tracking, for a line of throat-clearing. */
+  .hero-kicker { font-size: 11px; letter-spacing: 0.08em; }
+  /* A column of four costs ~100px more than the wrapped grid it replaces, and the hero had 14px
+     of slack. Paid for by the lede's redundant last sentence and a tighter type scale — the tabs
+     and the scroll cue both have to stay above the fold. */
+  .lede-tail { display: none; }
+  /* Top-aligned, not centred: this block is a budget — the dive-in button is the point of the
+     screen and has to stay reachable on a 700px phone. (The topbar is scroll-padding's job now,
+     so this padding is spacing rather than clearance.) */
   .journey-intro {
     justify-content: flex-start;
-    padding: calc(var(--topbar) + 8px) calc(var(--arrow-size) + var(--arrow-inset) + 6px) 3vh 20px;
+    padding: 2vh 20px 3vh;
   }
   .journey-intro h2 { font-size: clamp(1.6rem, 6.5vw, 2.2rem); margin: 0.2em 0; }
   .intro-dials { margin: 1.2rem 0; gap: 10px; }
   .dial { padding: 12px 14px; }
   .dial-name { font-size: 1rem; margin-top: 0.05em; }
   .dial-desc { font-size: 0.9rem; line-height: 1.45; }
+}
+
+/* ---- tall phones ----
+   The plane grows via a taller viewBox (compactTall in MoodSpace.jsx — keep the 780px in step with
+   TALL in lib.js); this spends the rest of the slack on the text, so a big screen reads as a
+   generous version of the page rather than the same page with a hole under it. */
+@media (min-height: 780px) and (max-width: 900px) {
+  /* Distribute the slack instead of pooling it. `.scroll-cue`'s `margin-top: auto` claimed ALL the
+     free space, so the hero bunched against the topbar and left one 298px void above the cue;
+     space-evenly spreads the same height across every gap. The cue gives up its auto margin to
+     take part — it is the last item either way, so it still lands at the bottom. */
+  .hero { justify-content: space-evenly; }
+  .hero .scroll-cue { margin-top: 0; }
+  /* The decade, its caption and its player stay a group — they are one thought, and spreading them
+     across the band pulled them apart. The page's slack goes above the plane instead (below), which
+     was jammed against the topbar with ~5px of air. */
+  .deck-page { gap: 20px; }
+  .deck-plane { padding-top: 22px; }
+  .deck-page .step-decade { font-size: 2.4rem; }
+  .deck-page .step-inner p { font-size: 1.12rem; line-height: 1.5; }
+}
+
+/* ---- short screens (landscape phones) ----
+   A 390px-tall viewport cannot hold the portrait deck: measured, the hero ran 445px so every story
+   tab sat below the fold, and stacking plane-over-page left 178px for a decade, a caption and a
+   player. Landscape's scarce axis is height and its spare one is width, so the plane moves BESIDE
+   the pages instead of above them, and the hero spends its budget across rather than down. */
+@media (max-height: 500px) and (max-width: 1200px) {
+  /* Full-height, same as everywhere else — the trimmed type below brings the content to ~330px, so
+     it fits. It briefly had `min-height: 0` while the content still ran 445px, and the cost was a
+     hero that stopped short and let the explainer bleed into the same screen. */
+  /* The topbar is scroll-padding's job now, so this is breathing room rather than clearance — the
+     title used to start 8px under the bar. The rest of the block spends the freed height on the
+     gaps between the three things on this screen. */
+  .hero { padding: 6vh 20px 3vh; }
+  .hero-kicker { display: none; }
+  .hero h1 { font-size: clamp(1.3rem, 3.4vw, 1.8rem); margin: 0.15em 0; }
+  /* No ch cap: the whole point of this viewport is that a line can be long, and four wide lines
+     cost less height than six narrow ones. */
+  .hero-lede { margin-top: 1.4em; font-size: 0.88rem; max-width: none; }
+  /* Back to a single row: the column is a portrait answer to a narrow screen, and landscape has
+     width to spare — stacked, four rows would cost the height this viewport does not have. */
+  .story-toggle { flex-direction: row; margin-top: 1.8rem; }
+  .story-seg { flex: 1 1 auto; white-space: nowrap; font-size: 0.85rem; padding: 12px 14px; }
+  /* margin-top: auto on .scroll-cue already pins it to the hero's bottom edge; the hero reaching
+     the bottom of the screen is what actually puts it there. */
+  .scroll-cue { padding-top: 1rem; }
+  /* The explainer is a screen with five stacked parts, and 390px cannot hold them at portrait
+     sizing — measured, it ran to 449px and the dive-in button fell past the fold. Three dials
+     across rather than stacked, trimmed to their essentials, and the "Ready to dive in?" line
+     goes: the button beneath it already says so. */
+  .journey-intro { padding-top: 3vh; }
+  .journey-intro h2 { font-size: clamp(1.3rem, 3.2vw, 1.7rem); margin: 0.1em 0; }
+  .journey-intro .lede { font-size: 0.85rem; max-width: none; }
+  .intro-dials { grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0.7rem 0; }
+  .dial { padding: 8px 10px; }
+  .dial-desc { font-size: 0.82rem; line-height: 1.35; }
+  .dial-range { display: none; }
+  .intro-ask { display: none; }
+
+  /* Plane in a sticky left column spanning every page's row; pages stack in the right one. */
+  .deck {
+    display: grid;
+    grid-template-columns: minmax(230px, 38%) 1fr;
+    column-gap: 20px;
+    padding-right: 20px;
+  }
+  .deck-plane {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    align-self: start;
+    /* Fill the visible band and centre the plot inside it. Left to size itself the sticky block
+       hugged the top — 8px of air above the plot and 70px below — which also made the text column
+       beside it, which IS centred, read as sitting low by comparison. */
+    height: var(--screen);
+    display: flex;
+    align-items: center;
+    padding: 8px 0 8px 16px;
+    border-bottom: 0;
+  }
+  /* Fill the column. The cap is only a backstop against the plane pushing itself off-screen — the
+     taller viewBox (compactTall) is what actually lets it use the height. */
+  .deck-plane .moodspace { max-height: calc(var(--screen) - 26px); }
+  .deck-page {
+    grid-column: 2;
+    padding: 2vh 0;
+    gap: 18px;
+  }
+  /* Sized up to fill the column rather than leaving it a third empty: the plane is in the other
+     column here, so nothing else on this one can take the height. */
+  .deck-page .step-decade { font-size: 2.2rem; }
+  .deck-page .step-inner p { font-size: 1rem; line-height: 1.5; }
 }
 
 /* ---- motion ---- */

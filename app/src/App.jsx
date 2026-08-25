@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   useData,
+  useIsMobile,
   useSettleToStep,
   scrollToIntro as toIntro,
   scrollToTop as toTop,
@@ -16,14 +17,19 @@ export default function App() {
   const data = useData()
   const [jid, setJid] = useState(JOURNEYS[0].id)
   const [showTop, setShowTop] = useState(false)
-  useSettleToStep('.step')
+  const mobile = useIsMobile()
+  // The deck snaps its own pages, so the settle glide is desktop-only — see useSettleToStep.
+  useSettleToStep(mobile ? null : '.step')
 
   useEffect(() => {
+    // The deck does not render the button, so there is nothing to show or hide — and a setState per
+    // scroll would re-render the whole journey, plane and players included, to change nothing.
+    if (mobile) return
     const onScroll = () => setShowTop(window.scrollY > window.innerHeight * 0.8)
     window.addEventListener('scroll', onScroll, { passive: true })
     onScroll()
     return () => window.removeEventListener('scroll', onScroll)
-  }, [])
+  }, [mobile])
 
   if (!data) {
     return <div className="loading">Loading a century of music…</div>
@@ -51,8 +57,10 @@ export default function App() {
           Every song Spotify knows carries a handful of numbers — how positive it sounds, how
           intense, how danceable, whether it’s in a major or minor key. Line up a century of them
           and the sound of music turns out to have shifted in clear, and often surprising, ways —
-          several threads that don’t all point the same direction. Pick a story below and travel it
-          decade by decade.
+          several threads that don’t all point the same direction.{' '}
+          {/* Dropped on phones, where the four story buttons stack directly beneath this and say
+              the same thing at a cost of three lines the hero cannot spare. */}
+          <span className="lede-tail">Pick a story below and travel it decade by decade.</span>
         </p>
         <div id="stories" className="story-toggle" role="tablist" aria-label="Pick a story">
           {JOURNEYS.map((j) => (
@@ -114,13 +122,18 @@ export default function App() {
         </p>
       </footer>
 
-      <button
-        className={`to-top ${showTop ? 'show' : ''}`}
-        aria-label="Jump to the top"
-        onClick={toTop}
-      >
-        ↑ Jump to top
-      </button>
+      {/* Desktop only. On the deck it floats over a page whose whole lower half is the songs, and
+          a phone's own scroll-to-top gestures already cover it — the arrows went for the same
+          reason: fixed chrome costs more on a small screen than it gives back. */}
+      {!mobile && (
+        <button
+          className={`to-top ${showTop ? 'show' : ''}`}
+          aria-label="Jump to the top"
+          onClick={toTop}
+        >
+          ↑ Jump to top
+        </button>
+      )}
     </div>
   )
 }
