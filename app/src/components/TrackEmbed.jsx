@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 
 // The active decade's three representative tracks as compact Spotify players
 // (most popular, nearest the decade's mood centre). Keyed by id so they reload on change.
@@ -8,6 +8,15 @@ import { useState } from 'react'
 // first and hide the other two, which is two thirds of the decade's music unreachable.
 export default function TrackEmbed({ tracks, decade, active, carousel }) {
   const [at, setAt] = useState(0)
+  const groupRef = useRef(null)
+  useLayoutEffect(() => {
+    // Inert prevents new focus, but an already focused cross-origin frame can retain it.
+    if (!active && groupRef.current?.contains(document.activeElement)) {
+      const visiblePlayer = groupRef.current.closest('.embed-stack')?.querySelector('.embed.show iframe')
+      if (visiblePlayer) visiblePlayer.focus()
+      else document.activeElement?.blur()
+    }
+  }, [active])
   if (!tracks || tracks.length === 0) return null
   const list = tracks.slice(0, 3)
 
@@ -20,7 +29,7 @@ export default function TrackEmbed({ tracks, decade, active, carousel }) {
   }
 
   return (
-    <div className={`embed ${active ? 'show' : ''} ${carousel ? 'embed-plain' : ''}`}>
+    <div ref={groupRef} inert={active ? undefined : ''} aria-hidden={active ? undefined : true} className={`embed ${active ? 'show' : ''} ${carousel ? 'embed-plain' : ''}`}>
       {/* No caption on the carousel: the decade heading sits directly above it on a deck page, so
           "Sounds like the 1920s" says the decade twice. The dots cover the rest — they already
           show there are three and which one you are on. */}

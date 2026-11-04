@@ -14,7 +14,7 @@ import Beat from './components/Beat.jsx'
 import { WorldChart } from './charts/WorldChart.jsx'
 
 export default function App() {
-  const data = useData()
+  const { data, error, retry } = useData()
   const [jid, setJid] = useState(JOURNEYS[0].id)
   const [showTop, setShowTop] = useState(false)
   const mobile = useIsMobile()
@@ -32,7 +32,11 @@ export default function App() {
   }, [mobile])
 
   if (!data) {
-    return <div className="loading">Loading a century of music…</div>
+    return <main className="loading">
+      {error ? <div role="alert"><h1>Unable to load the music</h1><p>{error}</p>
+        <button className="explore-btn" onClick={retry}>Try again</button></div>
+        : <p role="status">Loading a century of music…</p>}
+    </main>
   }
 
   const { decades } = data.timeline
@@ -133,7 +137,11 @@ export default function App() {
         </p>
         <p className="credits">
           Built from ~587k tracks (1922–2021) + US economic series (FRED). An exploratory,
-          correlational read — see the notebooks for methods and caveats. Song previews via Spotify.
+          correlational read — see the{' '}
+          <a href="https://github.com/Jesse-Ahlbrecht/spotify-tracks/blob/main/docs/findings.md">methods and caveats</a>{' '}
+          and <a href="https://github.com/Jesse-Ahlbrecht/spotify-tracks/tree/main/notebooks">analysis notebooks</a>.
+          {' '}This is a historical catalog sample, not all music; early decades are sparse.
+          Song previews via Spotify.
         </p>
       </footer>
 

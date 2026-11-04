@@ -15,7 +15,7 @@ export function WorldChart({ world }) {
         { key: 'misery', label: 'Misery', color: 'var(--c-misery)' },
         { key: 'sentiment', label: 'Sentiment', color: 'var(--c-sentiment)' },
       ]}
-      caption="Standardised so different units share one axis. Music valence wanders largely independent of both the objective economy (misery) and how people feel (sentiment) — while sentiment itself drifts below the misery-implied line in the mid-2000s and 2010s (people feeling worse than the numbers say)."
+      caption="Three separately standardised series, each relative to its own average. Higher valence means more positive-sounding music; higher misery means worse economic conditions (unemployment plus inflation); higher sentiment means greater consumer confidence. Misery is shown without reversing its sign. These lines are descriptive comparisons, not predictions or evidence of causation."
     />
   )
 }

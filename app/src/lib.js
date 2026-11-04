@@ -5,20 +5,27 @@ const BASE = import.meta.env.BASE_URL
 // ---- data loading ---------------------------------------------------------
 export function useData() {
   const [data, setData] = useState(null)
+  const [error, setError] = useState(null)
+  const [attempt, setAttempt] = useState(0)
   useEffect(() => {
+    const controller = new AbortController()
     let alive = true
-    Promise.all([
-      fetch(`${BASE}data/timeline.json`).then((r) => r.json()),
-      fetch(`${BASE}data/tracks.json`).then((r) => r.json()),
-      fetch(`${BASE}data/world.json`).then((r) => r.json()),
-    ]).then(([timeline, tracks, world]) => {
+    setError(null)
+    Promise.all(['timeline', 'tracks', 'world'].map(async (name) => {
+      const response = await fetch(`${BASE}data/${name}.json`, { signal: controller.signal })
+      if (!response.ok) throw new Error(`Unable to load ${name} (${response.status})`)
+      return response.json()
+    })).then(([timeline, tracks, world]) => {
       if (alive) setData({ timeline, tracks, world })
+    }).catch(() => {
+      if (alive) setError('The music data could not be loaded. Check your connection and try again.')
     })
     return () => {
       alive = false
+      controller.abort()
     }
-  }, [])
-  return data
+  }, [attempt])
+  return { data, error, retry: () => { setError(null); setAttempt((n) => n + 1) } }
 }
 
 // ---- breakpoints -----------------------------------------------------------

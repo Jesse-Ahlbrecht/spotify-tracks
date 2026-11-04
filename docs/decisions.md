@@ -763,3 +763,16 @@ Flipped it, via a `flipY` flag on the journey (lib.js `JOURNEYS`) that reverses 
   `.dial-range`, a name nothing had carried for a while, so it was hiding nothing.
 
 **Verification: 139/139**, five viewports.
+
+### 2026-11-04 — Initial review follow-up
+
+Fixed the five initial Astra findings: constrain the desktop graphic to the space below
+its sticky header (with scrolling for unusually short windows); make inactive preloaded
+players inert; link the methods/findings and notebooks from the footer; show data-load
+failures with retry and cancel obsolete requests; describe the coda as separate z-scored
+series rather than an uncomputed misery-implied prediction. Data values are unchanged.
+
+AI disclosure: Codex implemented these focused fixes and a synthetic loader regression
+check (`node --test app/scripts/test-data-loading.mjs` from the repository root).
+Independent Astra verification and its exact scope/results are recorded in the external
+shared review ledger; these changes do not imply a full repository or dependency audit.
