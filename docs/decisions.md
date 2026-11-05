@@ -776,3 +776,12 @@ AI disclosure: Codex implemented these focused fixes and a synthetic loader regr
 check (`node --test app/scripts/test-data-loading.mjs` from the repository root).
 Independent Astra verification and its exact scope/results are recorded in the external
 shared review ledger; these changes do not imply a full repository or dependency audit.
+
+### 2026-11-05 — Responsive observer and motion follow-up
+
+Codex reattaches the size observers when Journey switches between mobile and desktop
+and clears obsolete height properties. Jump-to-top now delegates motion to the existing
+CSS preference rule. Targeted regression checks and a desktop–phone–desktop browser
+round trip passed. The suspected landscape sticky-chart loss did not reproduce at
+844×390 in Chromium; no landscape CSS was changed. This is local verification, not
+an independent model review or a public deployment.

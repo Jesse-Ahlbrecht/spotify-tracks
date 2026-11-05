@@ -94,11 +94,10 @@ export function scrollToReadingLine(sel) {
   window.scrollTo({ top: readingLineY(el) })
 }
 
-// The landing screen. `smooth` is explicit here because this one is often a long way up, and the
-// jump reads as a journey back rather than a teleport.
+// Let CSS choose smooth scrolling, including its reduced-motion override.
 export function scrollToTop() {
   cancelSettle()
-  window.scrollTo({ top: 0, behavior: 'smooth' })
+  window.scrollTo({ top: 0 })
 }
 
 // The selected story's explainer. Its top edge, not its middle: it is a screen, not a decade.
@@ -325,7 +324,7 @@ export function useSettleToStep(selector) {
 // Writes the property straight onto the host element instead of going through React state: only
 // CSS consumes it, and routing it through a render would rebuild the whole journey (d3 plane
 // included) on every sub-pixel ResizeObserver tick during a window drag.
-export function useSizeVar(prop, hostSelector) {
+export function useSizeVar(prop, hostSelector, layoutKey) {
   const ref = useRef(null)
   useEffect(() => {
     const el = ref.current
@@ -339,8 +338,11 @@ export function useSizeVar(prop, hostSelector) {
       host.style.setProperty(prop, `${Math.round(h)}px`)
     })
     ro.observe(el)
-    return () => ro.disconnect()
-  }, [prop, hostSelector])
+    return () => {
+      ro.disconnect()
+      host.style.removeProperty(prop)
+    }
+  }, [prop, hostSelector, layoutKey])
   return ref
 }
 

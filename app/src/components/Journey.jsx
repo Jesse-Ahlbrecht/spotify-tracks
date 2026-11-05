@@ -24,10 +24,10 @@ export default function Journey({ decades, tracks, journey }) {
   const settled = useDebounced(active)
   // Desktop: the player stack's height as --embed-h, which lets the captions centre on the plane
   // rather than the viewport (see .step-inner in index.css).
-  const stackRef = useSizeVar('--embed-h', '.journey')
+  const stackRef = useSizeVar('--embed-h', '.journey', mobile)
   // Mobile: the pinned plane's height as --plane-h, which is how far each page pads its top to
   // clear it. Measured for the same reason --embed-h is — it moves with the viewport.
-  const planeRef = useSizeVar('--plane-h', '.journey')
+  const planeRef = useSizeVar('--plane-h', '.journey', mobile)
 
   const plane = (compact) => (
     <MoodSpace
