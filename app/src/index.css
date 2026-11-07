@@ -139,17 +139,24 @@ em { font-style: normal; color: var(--accent); transition: color 0.3s ease; }
   top: var(--topbar);
   height: var(--screen);
   display: grid;
-  grid-template-rows: minmax(180px, 1fr) auto;
+  grid-template-rows: auto auto;
+  /* Chart and players stay one group, centred — the midline --caption-lift assumes. */
+  align-content: center;
   gap: var(--col-gap);
   padding: 12px 0;
   max-width: 620px;
   /* Short desktop windows retain access to players rather than clipping them. */
   overflow-y: auto;
 }
+/* At most a square. Filling the whole height above the players made a tall, narrow card on a tall
+   screen; capped by what that height allows, it turns slightly wide on a short one instead. The
+   chart redraws to whatever box this gives it (ShareBars measures itself). */
 .journey-graphic > .moodspace {
-  min-height: 0;
   width: 100%;
-  height: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  min-height: 180px;
+  max-height: calc(var(--screen) - 24px - var(--col-gap) - var(--embed-h, 0px));
 }
 .journey-graphic > .embed-stack { min-width: 0; }
 

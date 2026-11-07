@@ -892,3 +892,14 @@ should follow.
 138/139, the one failure being the caption-centring check that also fails on `main` here.
 
 **AI disclosure:** Claude-generated (Opus 5.5), requested by Jesse.
+
+### Follow-up: the chart card is at most a square
+
+Jesse: the card should be closer to a square rather than very tall. Filling the whole height above
+the players made a tall, narrow card on a tall screen (it is width-capped at 620px). The card is
+now `aspect-ratio: 1` with a `max-height` of what the column leaves above the players, so it is
+square when there is room and slightly wide when there is not; the graphic column's rows are
+`auto auto`, centred as one group (the midline `--caption-lift` already assumed). Measured in
+Playwright: 620×620 at 1440×1300, 620×558 at 1512×982, 608×296 at 1280×720. `check:scroll`
+138/139 (the caption-centring check, failing on `main` too). AI disclosure: Claude-generated
+(Opus 5.5), requested by Jesse.
