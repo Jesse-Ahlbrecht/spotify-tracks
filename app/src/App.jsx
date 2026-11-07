@@ -5,9 +5,11 @@ import {
   useSettleToStep,
   scrollToIntro as toIntro,
   scrollToTop as toTop,
+  scrollToReadingLine,
   JOURNEYS,
 } from './lib.js'
 import Journey from './components/Journey.jsx'
+import QuickFeed from './components/QuickFeed.jsx' // PROTOTYPE: quick swipe mode
 import JourneyIntro from './components/JourneyIntro.jsx'
 import Beat from './components/Beat.jsx'
 import { WorldChart } from './charts/WorldChart.jsx'
@@ -16,6 +18,7 @@ export default function App() {
   const { data, error, retry } = useData()
   const [jid, setJid] = useState(JOURNEYS[0].id)
   const [showTop, setShowTop] = useState(false)
+  const [quick, setQuick] = useState(false) // PROTOTYPE: the quick swipe feed is open
   const mobile = useIsMobile()
   // The deck snaps its own pages, so the settle glide is desktop-only — see useSettleToStep.
   useSettleToStep(mobile ? null : '.step')
@@ -99,15 +102,35 @@ export default function App() {
             </button>
           ))}
         </div>
-        <button className="explore-btn scroll-cue" onClick={toIntro}>
-          scroll to travel through time <span className="cue-arrow">↓</span>
-        </button>
+        {/* PROTOTYPE: two ways through the selected story */}
+        <div className="scroll-cue mode-choice">
+          <button className="explore-btn" onClick={toIntro}>
+            Full journey <span className="cue-arrow">↓</span>
+          </button>
+          <button className="explore-btn mode-quick" onClick={() => setQuick(true)}>
+            Quick swipe
+          </button>
+        </div>
       </section>
 
       {/* Keyed so switching stories remounts the explainer and its reveal replays. */}
       <JourneyIntro key={journey.id} journey={journey} />
 
       <Journey decades={decades} tracks={data.tracks} journey={journey} />
+
+      {quick && (
+        <QuickFeed
+          journey={journey}
+          decades={decades}
+          tracks={data.tracks}
+          onClose={() => setQuick(false)}
+          onSwitch={(id) => setJid(id)}
+          onFullJourney={(i) => {
+            setQuick(false)
+            requestAnimationFrame(() => scrollToReadingLine(`.step[data-step="${i}"]`))
+          }}
+        />
+      )}
 
       {journey.coda && (
         <Beat

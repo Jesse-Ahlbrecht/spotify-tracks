@@ -903,3 +903,40 @@ square when there is room and slightly wide when there is not; the graphic colum
 Playwright: 620×620 at 1440×1300, 620×558 at 1512×982, 608×296 at 1280×720. `check:scroll`
 138/139 (the caption-centring check, failing on `main` too). AI disclosure: Claude-generated
 (Opus 5.5), requested by Jesse.
+
+## 2026-11-07 — A quick version beside the full journey
+
+Jesse: the full journey takes time; offer a short, TikTok-like way through each story too, and keep
+both. The hero now offers **Full journey ↓** and **Quick swipe**. The quick version
+(`QuickFeed.jsx`) is a full-screen vertical feed over the page: a start card, one card per decade,
+an end card. Each decade card has a headline for how the music *feels* then, one line of story,
+the same two bar charts as the full journey, and one song that plays as the card lands (one at a
+time, via the same Spotify postMessage protocol). Each card links into the full journey at that
+decade; the end card offers the next story or the full journey.
+
+How it got here, from Jesse's feedback on the prototypes:
+- **Desktop is not a phone column.** A narrow phone feed in the middle of a wide screen "does not
+  work at all for desktop". Desktop cards lay out across the screen instead: words and song on the
+  left, the charts large and square on the right.
+- **No auto-advance.** A version that stepped through the decades on a timer was dropped: the
+  reader clicks or scrolls through at their own pace.
+- **Vertical on both.** One card per screen, mandatory scroll-snap (fine here, unlike the long
+  page, because every snap area is exactly one screen). On desktop the wheel steps one card per
+  gesture itself, because snapping alone pulled a wheel tick back to the full-screen card it came
+  from; a trackpad flick's inertia is swallowed until the wheel is quiet. ↑ ↓ buttons and arrow
+  keys step too. A wheel over the Spotify player does nothing (a cross-origin iframe keeps its
+  events).
+- **The story, not the numbers.** The first cards led with a big percentage ("57% of songs are
+  high-energy, up from 49%"). The words now carry the vibe — 48 lines in `lib.js` `QUICK`, a
+  headline and a story line per decade per journey plus an end line — and the percentages live
+  only in the charts. Every "lowest", "most" and "half" in them was checked against
+  `timeline.json`.
+
+**Limits:** autoplay of the songs is verified only in headless Chromium; real browsers need a
+first tap or click (the Start button), and iOS Safari may refuse it anyway.
+
+**Verification:** Playwright at 1440×900, 1280×720 and 375×667 — wheel, flick, buttons and keys
+each move one card; no card content overflows; no page errors.
+
+**AI disclosure:** Claude-generated (Opus 5.5) — `QuickFeed.jsx`, `QuickFeed.css`, the `QUICK`
+lines and the `App.jsx` mode choice — requested and steered by Jesse.

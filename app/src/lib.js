@@ -465,6 +465,69 @@ const INTENSITY_CAPTIONS = {
   2020: 'Energy finally plateaus even as acousticness stays low — the electrification that drove intensity has largely run its course.',
 }
 
+// The quick version's words: per decade, a headline for how the music *feels* and one line of
+// story — the vibe the bars show, not the bars read aloud (the chart beside them prints the shares).
+// `end` closes the story. Checked against timeline.json's shares; where a line says "lowest" or
+// "most", it is.
+const QUICK = {
+  mood: {
+    1920: ['Bright and easy.', 'The Jazz Age sounds sunny and gentle: cheerful songs, almost none of them loud.'],
+    1930: ['A little less sunny.', 'The Depression takes some shine off, but the music stays soft and unhurried.'],
+    1940: ['Quiet and subdued.', 'Wartime crooners and ballads. The cheer fades, and the music has almost no drive at all.'],
+    1950: ['The gloomiest it gets — and still calm.', 'Cheer hits its century low, while the energy is only just waking up.'],
+    1960: ['Things wake up.', 'Electric bands arrive, and songs get louder and brighter at the same time.'],
+    1970: ['Loud and happy.', 'Disco, rock and soul: upbeat and full of drive.'],
+    1980: ['Big, bright and bold.', 'Intense, upbeat songs become the everyday sound of pop.'],
+    1990: ['Still riding high.', 'The energy keeps building, and the good mood mostly holds.'],
+    2000: ['Louder, a shade less cheerful.', 'Intensity pushes toward its peak, and the happy songs start to thin out.'],
+    2010: ['Intense, but downcast.', 'The energy stays maxed out while the cheer drops hard: big songs, heavy hearts.'],
+    2020: ['The opposite of where we started.', 'Loud and driving, and only half the songs sound happy — a world away from the bright, calm 1920s.'],
+    end: ['From bright and calm to intense and downcast.', 'Songs got more intense almost every decade. Their cheer wandered — and ends lower than it began.'],
+  },
+  beat: {
+    1920: ['Made for dancing.', 'Charleston and foxtrot: a bouncy beat, played soft.'],
+    1930: ['Smoother, less bounce.', 'Swing turns lush and orchestral; the beat relaxes and the volume stays low.'],
+    1940: ['The groove goes missing.', 'Ballads and crooners take over, and most songs no longer make you move.'],
+    1950: ['A spark of rock ’n’ roll.', 'A little drive creeps in, but the dance floor is still finding its feet.'],
+    1960: ['Plugged in.', 'Electric bands double the drive, and the beat starts pulling back up.'],
+    1970: ['The floor fills up.', 'Disco and funk: songs get more danceable and more driving at once.'],
+    1980: ['Locked to the grid.', 'Drum machines keep everything tight, punchy and made to move.'],
+    1990: ['Hard and steady.', 'Rock and hip-hop keep the intensity climbing while the groove holds firm.'],
+    2000: ['Louder and bouncier.', 'The loudness war meets dance-pop: more drive, more beat.'],
+    2010: ['The Jazz Age groove is back.', 'Streaming rewards the hook. As danceable as the 1920s — but far, far louder.'],
+    2020: ['Peak groove.', 'More danceable than ever, while the intensity finally levels off.'],
+    end: ['The groove came back. The volume never left.', 'The beat started strong, lost its step mid-century, then climbed past where it began — while songs got louder almost every decade.'],
+  },
+  sad: {
+    1920: ['Sunny, in a major key.', 'Few songs sound sad, and most are written bright: the least melancholy decade either way.'],
+    1930: ['A sadder mood creeps in.', 'The Depression darkens the feel, but the songs are still written in bright major keys.'],
+    1940: ['Sad on the surface.', 'Wartime: songs sound far more downbeat, yet minor keys are still rare.'],
+    1950: ['The saddest-sounding decade.', 'Half the songs sound sad — but they are still written in major keys.'],
+    1960: ['Cheer returns.', 'Pop brightens up, and the keys barely change.'],
+    1970: ['Bright on top, darker underneath.', 'The mood stays upbeat while minor keys start to creep in.'],
+    1980: ['One song in three in minor.', 'Songs still sound fairly cheerful, but the writing is slowly darkening.'],
+    1990: ['The two kinds of sad drift apart.', 'The mood holds steady while minor keys keep spreading.'],
+    2000: ['Darker, both ways.', 'For the first time, both kinds of sad start rising together.'],
+    2010: ['The sad banger.', 'A gloomy feel and minor keys surge at once: melancholy you can dance to.'],
+    2020: ['Sad, both ways.', 'Half the songs sound sad, and minor keys are at their century high.'],
+    end: ['Sad by design.', 'How sad songs sound came and went. How they are written only went one way: toward minor keys.'],
+  },
+  intensity: {
+    1920: ['Unplugged and calm.', 'Almost every song is acoustic, and almost none of them are loud.'],
+    1930: ['Still unplugged.', 'Recorded live to disc: the music has nowhere to get loud from.'],
+    1940: ['More players, not more power.', 'Big bands get bigger, but it is all acoustic and still gentle.'],
+    1950: ['The first guitars plug in.', 'Electric guitars show up, but the sound is still overwhelmingly acoustic and soft.'],
+    1960: ['Switched on.', 'Electric instruments spread fast, and the music gets louder with them.'],
+    1970: ['Amps up.', 'Amps, effects and studio tricks: half the songs now sound electric, and as many are high-energy.'],
+    1980: ['Synths everywhere.', 'Synths and drum machines push the acoustic sound out, and the intensity rises with them.'],
+    1990: ['Digital by default.', 'Most songs are electric now, and most are high-energy.'],
+    2000: ['The loudness war.', 'Records are made louder and louder, and acoustic textures keep receding.'],
+    2010: ['Made on a laptop.', 'Production lives in the computer; the sound is electric and intense by default.'],
+    2020: ['The ceiling.', 'Nearly everything is electric, and the intensity has finally stopped climbing.'],
+    end: ['Plug it in, turn it up.', 'As music went electric, it got intense right alongside — the clearest trend of the century.'],
+  },
+}
+
 // What the journey's bars count: the share of a decade's songs that pass one plain test. `field`
 // is the timeline.json key (computed in scripts/export_app_data.py); 0.5 is the middle of
 // Spotify's 0–1 scale, and minor key is already a yes/no. `says` finishes "% of songs that …" (the
@@ -504,11 +567,11 @@ const INTROS = {
 // The four decade-journeys the tabbed switcher offers. Each shows exactly two `measures` (keys into
 // MEASURES), one bar chart each; its representative tracks (tracks.json[id]) are the songs nearest
 // the decade's centroid in the two metrics behind those measures. `accent` is the journey's colour
-// in the tabs and copy. `coda: true` appends the year-based "Does music mirror the world?" closing
+// in the tabs and copy; `quick` holds the quick version's words. `coda: true` appends the year-based "Does music mirror the world?" closing
 // chart after it.
 export const JOURNEYS = [
-  { id: 'mood', tab: 'Mood', measures: ['happy', 'energetic'], accent: 'var(--c-energy)', captions: DECADE_CAPTIONS, intro: INTROS.mood, coda: true },
-  { id: 'beat', tab: 'The beat', measures: ['energetic', 'danceable'], accent: 'var(--c-dance)', captions: BEAT_CAPTIONS, intro: INTROS.beat },
-  { id: 'sad', tab: 'Two kinds of sad', measures: ['sad', 'minor'], accent: 'var(--c-minor)', captions: SAD_CAPTIONS, intro: INTROS.sad },
-  { id: 'intensity', tab: 'Why so intense', measures: ['electric', 'energetic'], accent: 'var(--c-acoustic)', captions: INTENSITY_CAPTIONS, intro: INTROS.intensity },
+  { id: 'mood', tab: 'Mood', measures: ['happy', 'energetic'], accent: 'var(--c-energy)', captions: DECADE_CAPTIONS, quick: QUICK.mood, intro: INTROS.mood, coda: true },
+  { id: 'beat', tab: 'The beat', measures: ['energetic', 'danceable'], accent: 'var(--c-dance)', captions: BEAT_CAPTIONS, quick: QUICK.beat, intro: INTROS.beat },
+  { id: 'sad', tab: 'Two kinds of sad', measures: ['sad', 'minor'], accent: 'var(--c-minor)', captions: SAD_CAPTIONS, quick: QUICK.sad, intro: INTROS.sad },
+  { id: 'intensity', tab: 'Why so intense', measures: ['electric', 'energetic'], accent: 'var(--c-acoustic)', captions: INTENSITY_CAPTIONS, quick: QUICK.intensity, intro: INTROS.intensity },
 ]
