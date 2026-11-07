@@ -177,9 +177,9 @@ const renderedPx = (page, svgSel, textSels) =>
 // The page the reader is on — not merely one with players, since the ±1 window mounts three.
 const READING = '.deck-page:has(.step-inner.active)'
 
-// The spotlighted decade's label sits beside its dot, and the outermost svg clips by default — so
-// at the decade whose dot is furthest right it used to render as "192". Both geometries flip the
-// label to the dot's left when it would not fit, so check both.
+// The current decade's value is printed over its bar, and the outermost svg clips by default — so
+// over the outermost bars a label wider than its bar could be cut off. (The old plane's decade label
+// did exactly that: "192".) Check both geometries.
 const labelInsidePlane = async (page, where) => {
   const m = await page.evaluate(() => {
     const svg = document.querySelector('.moodspace')
@@ -437,7 +437,7 @@ async function runMobile(browser, { width, height, label }) {
     `tick ${textPx?.['.ms-tick']}px, axis title ${textPx?.['.ms-axis-title']}px rendered`,
   )
 
-  // Decade 0 is the mood journey's rightmost dot — the case that clipped.
+  // Decade 0 is the leftmost bar, the one nearest the edge.
   await goToPage(mp, 0)
   await labelInsidePlane(mp, label)
   await goToPage(mp, 3)

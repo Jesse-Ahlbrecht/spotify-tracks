@@ -376,41 +376,19 @@ export function useInView({ once = true, ...io } = { rootMargin: '-15% 0px -15% 
   return [ref, seen]
 }
 
-// ---- axis strings ----------------------------------------------------------
-// VAR_INFO's axis strings are "← low   name   high →" (triple-spaced). Split so the low/high
-// descriptors can sit at the plot's edges — or in their own column on the intro cards — while the
-// name stays on its own. The triple spacing is what the split keys off; keep it.
-export function splitAxis(label) {
-  const parts = label.split(/\s{2,}/)
-  return parts.length === 3 ? parts : [null, label, null]
-}
-
-// The descriptors carry a horizontal arrow because that is how they read along the bottom of a
-// plot. Strip it wherever they don't run left-to-right and the caller points its own way.
-export function bareEnd(s) {
-  return s ? s.replace(/^←\s*/, '').replace(/\s*→$/, '') : s
-}
-
-// A flipped scale (`flipY`) puts the metric's high end at the bottom, so the two descriptors change
-// places — and each carries an arrow that points along the axis, which then points the wrong way.
-// Re-point as well as swap: returns [bottom, top] for a flipped axis.
-export function flipEnds(low, high) {
-  return [high && `← ${bareEnd(high)}`, low && `${bareEnd(low)} →`]
-}
-
 // One short caption per decade for the mood journey's steps — valence × energy only.
 export const DECADE_CAPTIONS = {
-  1920: 'Where it begins, in the calm-and-bright corner: valence at its century high, energy near its floor. Positive, but gentle.',
+  1920: 'Where it begins: calm and bright. Valence at its century high, energy near its floor. Positive, but gentle.',
   1930: 'The Depression era. Valence dips a touch from the twenties’ high while energy barely moves — still calm, a little less bright.',
   1940: 'Wartime. Energy hits its century floor while valence sinks toward its own low — the calmest stretch of the hundred years.',
   1950: 'The vinyl era begins. Valence bottoms out here — its century low — even as energy just begins to stir.',
   1960: 'The turn upward. Energy climbs sharply for the first time, and valence rebounds from the fifties’ low.',
-  1970: 'Energy keeps surging while valence holds high — music drifts toward the bright, intense corner.',
-  1980: 'Energy keeps rising and valence stays high; the bright-and-intense quadrant fills in.',
+  1970: 'Energy keeps surging while valence holds high — music turns bright and intense.',
+  1980: 'Energy keeps rising and valence stays high; bright, intense songs become the norm.',
   1990: 'Peak variety. Energy is high and still climbing, valence steady.',
-  2000: 'Energy pushes toward its maximum, and valence begins its real decline — the bright corner starts to empty.',
-  2010: 'Energy peaks while valence drops hard — music lands in the intense-but-downcast corner.',
-  2020: 'Today. Valence sits near its modern low and energy finally plateaus: high-intensity, low-positivity — the far corner from where we began.',
+  2000: 'Energy pushes toward its maximum, and valence begins its real decline — happy-sounding songs start to thin out.',
+  2010: 'Energy peaks while valence drops hard — music turns intense but downcast.',
+  2020: 'Today. Valence sits near its modern low and energy finally plateaus: high-intensity, low-positivity — the opposite of where we began.',
 }
 
 // The beat: energy × danceability.
@@ -420,7 +398,7 @@ const BEAT_CAPTIONS = {
   1940: 'The mid-century dip. Danceability slumps toward its low as ballads and wartime crooners dominate; energy is still muted.',
   1950: 'Rock ’n’ roll’s first spark. Energy just begins to climb while the groove is still finding its feet.',
   1960: 'Amplification hits the rhythm section. Energy jumps as electric bands take over, and the beat starts pulling back up.',
-  1970: 'Disco and funk. Both dials rise together — this is the decade the floor never empties.',
+  1970: 'Disco and funk. Both rise together — this is the decade the floor never empties.',
   1980: 'Drum machines lock the grid. Danceability and energy keep climbing on programmed, four-on-the-floor precision.',
   1990: 'High energy, steady groove. Rock and hip-hop keep the intensity up while danceability holds.',
   2000: 'The loudness war peaks — energy near its maximum — and dance-pop pushes the beat higher still.',
@@ -450,7 +428,7 @@ const INTENSITY_CAPTIONS = {
   1940: 'Big bands add players, not power. Acousticness stays near the top and energy stays low.',
   1950: 'The first electric guitars appear, but the catalog is still overwhelmingly acoustic — energy barely stirs.',
   1960: 'Electrification arrives. As acousticness starts to fall, energy climbs in near-perfect lockstep.',
-  1970: 'Amps, effects, multitrack studios. Acousticness drops sharply and the energy curve bends up and stays up.',
+  1970: 'Amps, effects, multitrack studios. Acousticness drops sharply and energy climbs and stays up.',
   1980: 'Synths and drum machines. The acoustic share keeps collapsing; energy rides it higher.',
   1990: 'Digital production is the norm. Acousticness is low, energy high — the mirror is almost exact.',
   2000: 'The loudness war. Energy pushes toward its ceiling while acoustic textures keep receding.',
@@ -458,20 +436,21 @@ const INTENSITY_CAPTIONS = {
   2020: 'Energy finally plateaus even as acousticness stays low — the electrification that drove intensity has largely run its course.',
 }
 
-// The single source of per-metric truth: label + one-line gloss, the axis colour, and the
-// "← low   name   high →" axis string the plane draws. Everything metric-specific keys off this
-// table so nothing is duplicated across the config.
-export const VAR_INFO = {
-  valence: { label: 'Valence', desc: 'how positive a song sounds', color: 'var(--c-valence)', axis: '← sadder   valence   happier →' },
-  energy: { label: 'Energy', desc: 'how intense and driving it feels', color: 'var(--c-energy)', axis: '← calmer   energy   more intense →' },
-  danceability: { label: 'Danceability', desc: 'how steady and moving the beat is', color: 'var(--c-dance)', axis: '← stiller   danceability   more danceable →' },
-  minor_share: { label: 'Minor key', desc: 'a darker, more ambiguous tonality', color: 'var(--c-minor)', axis: '← brighter (major)   minor-key share   darker (minor) →' },
-  acousticness: { label: 'Acousticness', desc: 'how acoustic vs. electric / digital', color: 'var(--c-acoustic)', axis: '← electric / digital   acousticness   acoustic →' },
+// What the journey's bars count: the share of a decade's songs that pass one plain test. `field`
+// is the timeline.json key (computed in scripts/export_app_data.py); 0.5 is the middle of
+// Spotify's 0–1 scale, and minor key is already a yes/no. `rule` is how the intro explains it.
+export const MEASURES = {
+  happy: { field: 'happy', title: 'Songs that sound happy', color: 'var(--c-valence)', rule: 'Valence — how positive a song sounds — in the upper half of its scale.' },
+  sad: { field: 'sad', title: 'Songs that sound sad', color: 'var(--c-valence)', rule: 'Valence — how positive a song sounds — in the lower half of its scale.' },
+  energetic: { field: 'energetic', title: 'High-energy songs', color: 'var(--c-energy)', rule: 'Energy — how intense and driving a song feels — in the upper half of its scale.' },
+  danceable: { field: 'danceable', title: 'Danceable songs', color: 'var(--c-dance)', rule: 'Danceability — how steady and moving the beat is — in the upper half of its scale.' },
+  minor: { field: 'minor_share', title: 'Songs in a minor key', color: 'var(--c-minor)', rule: 'Written in a minor key rather than a major one: a darker, more ambiguous tonality.' },
+  electric: { field: 'electric', title: 'Electric songs', color: 'var(--c-acoustic)', rule: 'Acousticness in the lower half of its scale: made with electric or digital instruments, not acoustic ones.' },
 }
 
 // Each journey opens on an explainer screen: the arc in one line, before the two dials that draw
-// it. Deliberately no raw feature values — valence 0.6 means nothing to a reader, and the plane
-// two screens down prints the numbers anyway. Shape and direction only; where a proportion of
+// it. Deliberately no raw feature values — valence 0.6 means nothing to a reader, and the bars
+// two screens down print the shares anyway. Shape and direction only; where a proportion of
 // songs says it better than an adjective ("one in four"), that is plain enough to keep.
 const INTROS = {
   mood: {
@@ -492,15 +471,14 @@ const INTROS = {
   },
 }
 
-// The four decade-journeys the tabbed switcher offers. Each plots exactly two metrics (`x`/`y` are
-// keys into VAR_INFO, which supplies each axis's label and colour); its representative tracks
-// (tracks.json[id]) are the songs nearest that plane's per-decade centroid. The journey's accent
-// colour is derived at use as VAR_INFO[y].color. `coda: true` appends the year-based
-// "Does music mirror the world?" closing chart after it. `flipY: true` reverses the vertical
-// scale, so a metric that falls over the century still draws as a rising path.
+// The four decade-journeys the tabbed switcher offers. Each shows exactly two `measures` (keys into
+// MEASURES), one bar chart each; its representative tracks (tracks.json[id]) are the songs nearest
+// the decade's centroid in the two metrics behind those measures. `accent` is the journey's colour
+// in the tabs and copy. `coda: true` appends the year-based "Does music mirror the world?" closing
+// chart after it.
 export const JOURNEYS = [
-  { id: 'mood', tab: 'Mood', x: 'valence', y: 'energy', captions: DECADE_CAPTIONS, intro: INTROS.mood, coda: true },
-  { id: 'beat', tab: 'The beat', x: 'energy', y: 'danceability', captions: BEAT_CAPTIONS, intro: INTROS.beat },
-  { id: 'sad', tab: 'Two kinds of sad', x: 'valence', y: 'minor_share', captions: SAD_CAPTIONS, intro: INTROS.sad },
-  { id: 'intensity', tab: 'Why so intense', x: 'energy', y: 'acousticness', captions: INTENSITY_CAPTIONS, intro: INTROS.intensity, flipY: true },
+  { id: 'mood', tab: 'Mood', measures: ['happy', 'energetic'], accent: 'var(--c-energy)', captions: DECADE_CAPTIONS, intro: INTROS.mood, coda: true },
+  { id: 'beat', tab: 'The beat', measures: ['energetic', 'danceable'], accent: 'var(--c-dance)', captions: BEAT_CAPTIONS, intro: INTROS.beat },
+  { id: 'sad', tab: 'Two kinds of sad', measures: ['sad', 'minor'], accent: 'var(--c-minor)', captions: SAD_CAPTIONS, intro: INTROS.sad },
+  { id: 'intensity', tab: 'Why so intense', measures: ['electric', 'energetic'], accent: 'var(--c-acoustic)', captions: INTENSITY_CAPTIONS, intro: INTROS.intensity },
 ]

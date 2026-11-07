@@ -38,11 +38,14 @@ full results and [`docs/decisions.md`](docs/decisions.md) for the reasoning and 
   `scripts/export_app_data.py`, which writes ~18 KB of compact JSON to `app/public/data/`. The
   587k-row dataset never reaches the browser — the app reads pre-computed aggregates and renders them.
 - **One coherent story, four lenses.** Rather than four separate pages, the app is a single tabbed
-  journey — the 11-decade scroll persists while tabs swap the plane, tracks, and captions:
-  **Mood** (valence×energy), **The beat** (energy×danceability), **Two kinds of sad**
-  (valence×minor-key), **Why so intense** (energy×acousticness).
-- **Hear the data.** Each decade's dot links a real, representative track — the most popular track
-  nearest that decade's centroid in the plotted metrics — so the embed *sounds like the dot*.
+  journey — the 11-decade scroll persists while tabs swap the charts, tracks, and captions:
+  **Mood** (songs that sound happy / are high-energy), **The beat** (high-energy / danceable),
+  **Two kinds of sad** (sound sad / minor key), **Why so intense** (electric / high-energy).
+- **Shares of songs, not scores.** Each journey's sticky chart is two bar charts, one bar per
+  decade, of the share of songs passing a plain test ("77% of songs are high-energy"), so the
+  reader never has to interpret Spotify's 0–1 feature scale.
+- **Hear the data.** Each decade links real, representative tracks — the most popular tracks
+  nearest that decade's centroid in the journey's two metrics — so the embeds *sound like the decade*.
 - **Charts follow a small design system** (accessible palette, light/dark, single-axis only — the
   economy coda z-scores three series onto one axis rather than using a misleading dual-axis).
 - **Honesty is a first-class feature.** Early decades are a lo-fi survivorship sample; the app and

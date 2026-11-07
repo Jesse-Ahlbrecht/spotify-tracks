@@ -1,13 +1,13 @@
-import { useActiveStep, useDebounced, useIsMobile, useSizeVar, VAR_INFO } from '../lib.js'
+import { useActiveStep, useDebounced, useIsMobile, useSizeVar } from '../lib.js'
 import DecadeArrows from './DecadeArrows.jsx'
-import MoodSpace from './MoodSpace.jsx'
+import ShareBars from './ShareBars.jsx'
 import TrackEmbed from './TrackEmbed.jsx'
 
 // The journey, in two shapes. The active `journey` (chosen by the toggle in the hero) swaps the
-// plane, the tracks and the captions in both; axis labels and the accent colour come from VAR_INFO,
-// keyed by the journey's x/y metric names.
+// plane (its bar chart), the tracks and the captions in both; what the bars count comes from the
+// journey's `measures`.
 //
-// Desktop: a sticky decade-path graphic beside a scrolling column of per-decade steps.
+// Desktop: a sticky bar-chart graphic beside a scrolling column of per-decade steps.
 //
 // Mobile: the same decades as a deck of full-screen pages under one pinned compact plane —
 // vertical swipe moves through time, horizontal swipe moves through a decade's songs. The stacked
@@ -30,17 +30,7 @@ export default function Journey({ decades, tracks, journey }) {
   const planeRef = useSizeVar('--plane-h', '.journey', mobile)
 
   const plane = (compact) => (
-    <MoodSpace
-      decades={decades}
-      active={active}
-      xKey={journey.x}
-      yKey={journey.y}
-      xLabel={VAR_INFO[journey.x].axis}
-      yLabel={VAR_INFO[journey.y].axis}
-      flipY={journey.flipY}
-      accent={VAR_INFO[journey.y].color}
-      compact={compact}
-    />
+    <ShareBars decades={decades} active={active} measures={journey.measures} compact={compact} />
   )
   const songs = (i) => tracks[journey.id]?.[String(decades[i].decade)]
   const caption = (d, i) => (

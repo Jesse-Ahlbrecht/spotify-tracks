@@ -4,7 +4,7 @@ import { line as d3line, area as d3area } from 'd3-shape'
 import { extent, bisector } from 'd3-array'
 import { useIsMobile } from '../lib.js'
 
-// Two geometries, for the reason MoodSpace has two: the svg sizes by viewBox alone, so its font
+// Two geometries, for the reason the journey's ShareBars has two: the svg sizes by viewBox alone, so its font
 // sizes are user units and a 720-wide box in a phone column renders 12px ticks at ~6px. `compact`
 // is picked so one user unit is about one CSS px at phone width.
 // The wide right margin exists only to park the direct labels; compact drops those and reclaims

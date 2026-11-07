@@ -17,7 +17,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "analysi
 from common import load_timeline, load_misery, load_sentiment, ART  # noqa: E402
 
 # Each journey picks its 3 representative tracks near the decade's centroid *in the space of the
-# two metrics that journey plots* (see app JOURNEYS). `minor` is the per-track minor/major flag
+# two metrics behind that journey's bars* (see app JOURNEYS). `minor` is the per-track minor/major flag
 # behind the "minor key / tonal sadness" axis.
 JOURNEY_FEATS = {
     "mood": ["valence", "energy"],
@@ -39,14 +39,16 @@ def main():
     df = load_timeline()
     df["minor"] = df["mode"] == 0  # 0 = minor key
 
-    # --- per-decade dials the journey + beats read ---
+    # --- per decade: the share of songs passing each plain test the journey's bars show ---
+    # 0.5 is the middle of Spotify's 0-1 scale; minor key is already a yes/no.
     def agg(g):
         return {
-            "valence": r(g.valence.mean()),
-            "energy": r(g.energy.mean()),
-            "danceability": r(g.danceability.mean()),
+            "happy": r(g.valence.ge(0.5).mean()),
+            "sad": r(g.valence.lt(0.5).mean()),
+            "energetic": r(g.energy.ge(0.5).mean()),
+            "danceable": r(g.danceability.ge(0.5).mean()),
             "minor_share": r(g.minor.mean()),
-            "acousticness": r(g.acousticness.mean()),
+            "electric": r(g.acousticness.lt(0.5).mean()),
         }
 
     timeline = {"decades": [{"decade": int(d), **agg(g)} for d, g in df.groupby("decade")]}

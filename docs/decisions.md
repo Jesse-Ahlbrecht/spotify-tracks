@@ -785,3 +785,57 @@ CSS preference rule. Targeted regression checks and a desktop–phone–desktop 
 round trip passed. The suspected landscape sticky-chart loss did not reproduce at
 844×390 in Chromium; no landscape CSS was changed. This is local verification, not
 an independent model review or a public deployment.
+
+## 2026-11-07 — The journey chart: bars of "share of songs", not a two-metric plane
+
+Jesse wanted a chart for the journeys that is easier to understand, with everything else (the four
+separate journeys, the decade scroll, the captions, the players, the layout) left exactly as it was.
+
+**What was wrong with the plane.** Each journey drew its 11 decade averages as a path across two
+metrics. Readers had to trace the path to see time, the axes were zoomed to the averages (valence
+spans only 0.50–0.60 over the century, drawn edge to edge), it hid how widely songs spread inside
+each decade, and its units — Spotify's 0–1 scores — mean nothing to a reader, which is why the
+intro copy had already stopped quoting them.
+
+**How we got here.** Three rounds of mock-ups, each rejected for being harder to read than the
+problem it solved: a page of five alternative forms; a bespoke chart per journey (mood map, dot
+ladder, 100-song grid, acoustic/electric stream); then three options per journey prototyped inside
+the real app behind a picker. The fourth round dropped every abstract encoding and offered three
+forms that all speak in shares of songs — lines, bars, and "out of 10 songs" note icons. Jesse
+picked the bars.
+
+**What shipped.** `ShareBars.jsx` replaces `MoodSpace.jsx` in the same slot, card and viewBox
+geometries. Each journey shows two small bar charts, one bar per decade on a fixed 0–100% scale:
+the current decade's bar is full colour with its value printed, past decades are lighter, and
+decades still to come are empty slots, so scrolling fills the chart in. A line marks half of all
+songs. Each journey keeps its two metrics, phrased as a yes/no test per song:
+- Mood: sound happy (valence ≥ 0.5) / are high-energy (energy ≥ 0.5)
+- The beat: high-energy / danceable (danceability ≥ 0.5)
+- Two kinds of sad: sound sad (valence < 0.5) / minor key (mode, already yes/no)
+- Why so intense: electric (acousticness < 0.5) / high-energy
+
+0.5 is the middle of Spotify's scale. It is a presentation threshold, not a finding; the intro
+cards print each rule. `export_app_data.py` now writes these shares into `timeline.json` in place
+of the decade means, which nothing else read; `minor_share` is unchanged and `world.json` is
+byte-identical. Journey accents are explicit (`accent`) and keep their previous colours.
+
+**Removed with the plane:** `VAR_INFO` (replaced by `MEASURES`), the axis-string helpers
+(`splitAxis`, `bareEnd`, `flipEnds`), the `flipY` flag, the intro cards' direction rows and their
+CSS, and the plane's path/dot/spotlight styles. Six mood captions, one beat caption and one
+intensity caption described positions on the plane ("the far corner", "the quadrant fills in",
+"both dials") and were reworded to say the same thing without the geometry.
+
+**Verification.** `npm run check:scroll`: 137–138/139 across four runs. The one consistent failure,
+"caption is centred on the plane", fails identically on `main` in this environment (the player
+stack measures 316px), so it predates this change. The other failures were swipe-timing checks
+that hit a different viewport on each run and passed on the others. The label-clipping check now
+looks at the current bar's value label; its comments were updated, its logic was not.
+
+**Found, not fixed: `tracks.json` does not re-export reproducibly.** Re-running the export picked
+different songs for 11 of 44 journey-decades (ties in `popularity` make the top-100 cut
+order-dependent, and the pandas version may differ). The shipped `tracks.json` was restored
+untouched. Fixing it means a stable tie-break in `pick_tracks`, which is also the natural moment for
+the "better song picking" ideas above.
+
+**AI disclosure:** the mock-ups, the bar chart, the export change, the copy edits and this entry
+are Claude-generated (Opus 5.5), directed and chosen by Jesse.

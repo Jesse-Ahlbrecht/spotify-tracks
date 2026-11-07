@@ -6,7 +6,6 @@ import {
   scrollToIntro as toIntro,
   scrollToTop as toTop,
   JOURNEYS,
-  VAR_INFO,
 } from './lib.js'
 import Journey from './components/Journey.jsx'
 import JourneyIntro from './components/JourneyIntro.jsx'
@@ -41,7 +40,7 @@ export default function App() {
 
   const { decades } = data.timeline
   const journey = JOURNEYS.find((j) => j.id === jid)
-  const accent = VAR_INFO[journey.y].color // each journey's accent = its y-axis colour
+  const accent = journey.accent
 
   return (
     <div className="app" style={{ '--accent': accent }}>
@@ -88,7 +87,7 @@ export default function App() {
               role="tab"
               aria-selected={j.id === jid}
               className={`story-seg ${j.id === jid ? 'active' : ''}`}
-              style={{ '--seg-accent': VAR_INFO[j.y].color }}
+              style={{ '--seg-accent': j.accent }}
               onClick={() => {
                 if (j.id !== jid) {
                   setJid(j.id)

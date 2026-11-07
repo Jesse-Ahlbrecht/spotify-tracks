@@ -311,9 +311,6 @@ em { font-style: normal; color: var(--accent); transition: color 0.3s ease; }
 .dial { padding: 18px; }
 .dial-name { font-weight: 600; font-size: 1.15rem; letter-spacing: -0.01em; margin-top: 0.3em; }
 .dial-desc { color: var(--ink-2); font-size: 0.95rem; }
-.dial-arrow { color: var(--muted); font-size: 0.82rem; margin-top: 0.6em; }
-/* The vertical axis's two ends read bottom-to-top, so they stack rather than share a row. */
-.dial-arrow.vert { display: flex; flex-direction: column; line-height: 1.5; }
 /* The invitation is the one thing on this screen to click, so let it fill its content, not the
    column. `.explore-btn` supplies the pill; this just stops it stretching edge to edge. */
 .journey-intro .explore-btn { align-self: start; }
@@ -357,21 +354,17 @@ em { font-style: normal; color: var(--accent); transition: color 0.3s ease; }
   box-shadow: var(--shadow);
 }
 
-/* ---- mood-space ---- */
+/* ---- the plane: the journey's sticky bar charts (ShareBars.jsx) ---- */
 .moodspace { width: 100%; height: auto; }
-.ms-grid { stroke: var(--grid); stroke-width: 1px; }
-.ms-axis-line { stroke: var(--axis); stroke-width: 1px; }
 .ms-tick { fill: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
 .ms-axis { fill: var(--ink-2); font-size: 15.5px; }
 .ms-axis-title { font-size: 18.5px; }
-.ms-path { fill: none; stroke: var(--axis); stroke-width: 1.5px; opacity: 0.55; }
-.ms-dot { fill: var(--muted); }
-.ms-dot.future { opacity: 0.3; }
-.ms-dot.past { opacity: 0.65; }
-.ms-now { transition: transform 0.7s cubic-bezier(0.4, 0, 0.2, 1); }
-.ms-now-core { fill: var(--accent); }
-.ms-now-halo { fill: var(--accent); opacity: 0.18; }
 .ms-now-label { fill: var(--ink); font-weight: 700; font-size: 15px; }
+/* A decade's empty slot, and the half-of-all-songs reference line drawn over the bars. */
+.sb-slot { fill: var(--grid); opacity: 0.6; }
+.sb-half { stroke: var(--ink-2); stroke-width: 1px; opacity: 0.5; }
+.sb-value { paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+.sb-now { fill: var(--ink); font-weight: 700; }
 /* The compact geometry renders at roughly 1 user unit per CSS px, so these ARE the rendered sizes
    — trimmed a little from the wide plane's, which would crowd a 320-unit box. */
 .moodspace.compact .ms-tick { font-size: 12px; }
@@ -662,7 +655,7 @@ figcaption { margin-top: 10px; color: var(--ink-2); font-size: 0.9rem; max-width
 }
 
 /* ---- tall phones ----
-   The plane grows via a taller viewBox (compactTall in MoodSpace.jsx — keep the 780px in step with
+   The plane grows via a taller viewBox (compactTall in ShareBars.jsx — keep the 780px in step with
    TALL in lib.js); this spends the rest of the slack on the text, so a big screen reads as a
    generous version of the page rather than the same page with a hole under it. */
 @media (min-height: 780px) and (max-width: 900px) {
@@ -716,11 +709,6 @@ figcaption { margin-top: 10px; color: var(--ink-2); font-size: 0.9rem; max-width
   .intro-dials { grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0.7rem 0; }
   .dial { padding: 8px 10px; }
   .dial-desc { font-size: 0.82rem; line-height: 1.35; }
-  /* The direction row goes here — it is the dial's most expendable line, and the vertical axis
-     spends two of them. (Was `.dial-range`, a name nothing has carried for a while, so the row was
-     never actually hidden; the taller vertical dial is what pushed the dive-in button past the
-     fold at 844×390.) `.vert` is named too — the modifier outranks a bare `.dial-arrow`. */
-  .dial-arrow, .dial-arrow.vert { display: none; }
   .intro-ask { display: none; }
 
   /* Plane in a sticky left column spanning every page's row; pages stack in the right one. */
@@ -760,6 +748,6 @@ figcaption { margin-top: 10px; color: var(--ink-2); font-size: 0.9rem; max-width
 /* ---- motion ---- */
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .ms-now, .beat, .journey-intro { transition: none; }
+  .beat, .journey-intro { transition: none; }
   .cue-arrow { animation: none; }
 }
