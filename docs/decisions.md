@@ -864,3 +864,31 @@ check that also fails on `main` in this environment.
 
 **AI disclosure:** the hook, its tests and this entry are Claude-generated (Opus 5.5), requested by
 Jesse.
+
+## 2026-11-07 — The bar charts say what they count, and fill their card
+
+Jesse, on the first desktop view of the bars: the titles should fit the charts, and the layout
+should follow.
+
+- **Titles name the quantity.** "Electric songs" over bars printed "59%" left the reader to infer
+  what the 59% was of. Each chart is now titled "% of songs that sound electric" (etc.), with a
+  swatch in the bars' colour. `MEASURES.title` became `says`, which finishes both this title and the
+  intro card's "Songs that …", so the two cannot drift apart.
+- **One reference, labelled once.** The repeated "line = half of all songs" note became a "50%" tick
+  at the left of each half-line, where a reader looks for a y-axis label.
+- **The chart fills its card on desktop.** The card's height is whatever the sticky column leaves
+  above the players; the old fixed 560×470 viewBox letterboxed inside it with empty bands above and
+  below. The desktop svg now measures itself (ResizeObserver) and uses its own size as the viewBox,
+  which also makes one user unit one CSS px. The phone deck keeps the fixed `compact` geometries,
+  because there the card is sized *from* the chart (height: auto) and measuring it would be circular.
+- **Players caption:** "3 tracks nearest its centre" described the old plane; now "3 songs typical
+  of the decade".
+- **Phone top bar (pre-existing, same on `main`).** At 375–390px the brand and tagline still
+  wrapped, the bar grew past its 52px `--topbar`, and it covered the pinned chart's first title.
+  Neither wraps now, and below 420px the tagline is dropped.
+
+**Verification:** desktop in Claude's browser pane (viewBox tracks the card, e.g. 618×574); phone
+375×667 / 390×844 and landscape 844×390 screenshotted in Playwright; `npm run check:scroll`
+138/139, the one failure being the caption-centring check that also fails on `main` here.
+
+**AI disclosure:** Claude-generated (Opus 5.5), requested by Jesse.

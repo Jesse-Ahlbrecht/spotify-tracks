@@ -6,7 +6,7 @@ function Dial({ measure, role }) {
   return (
     <div className="dial">
       <div className="kicker">{role}</div>
-      <div className="dial-name" style={{ color: m.color }}>{m.title}</div>
+      <div className="dial-name" style={{ color: m.color }}>Songs that {m.says}</div>
       <div className="dial-desc">{m.rule}</div>
     </div>
   )

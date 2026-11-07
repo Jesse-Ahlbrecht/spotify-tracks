@@ -467,14 +467,15 @@ const INTENSITY_CAPTIONS = {
 
 // What the journey's bars count: the share of a decade's songs that pass one plain test. `field`
 // is the timeline.json key (computed in scripts/export_app_data.py); 0.5 is the middle of
-// Spotify's 0–1 scale, and minor key is already a yes/no. `rule` is how the intro explains it.
+// Spotify's 0–1 scale, and minor key is already a yes/no. `says` finishes "% of songs that …" (the
+// chart's title) and "Songs that …" (the intro card's); `rule` is how the intro explains it.
 export const MEASURES = {
-  happy: { field: 'happy', title: 'Songs that sound happy', color: 'var(--c-valence)', rule: 'Valence — how positive a song sounds — in the upper half of its scale.' },
-  sad: { field: 'sad', title: 'Songs that sound sad', color: 'var(--c-valence)', rule: 'Valence — how positive a song sounds — in the lower half of its scale.' },
-  energetic: { field: 'energetic', title: 'High-energy songs', color: 'var(--c-energy)', rule: 'Energy — how intense and driving a song feels — in the upper half of its scale.' },
-  danceable: { field: 'danceable', title: 'Danceable songs', color: 'var(--c-dance)', rule: 'Danceability — how steady and moving the beat is — in the upper half of its scale.' },
-  minor: { field: 'minor_share', title: 'Songs in a minor key', color: 'var(--c-minor)', rule: 'Written in a minor key rather than a major one: a darker, more ambiguous tonality.' },
-  electric: { field: 'electric', title: 'Electric songs', color: 'var(--c-acoustic)', rule: 'Acousticness in the lower half of its scale: made with electric or digital instruments, not acoustic ones.' },
+  happy: { field: 'happy', says: 'sound happy', color: 'var(--c-valence)', rule: 'Valence — how positive a song sounds — in the upper half of its scale.' },
+  sad: { field: 'sad', says: 'sound sad', color: 'var(--c-valence)', rule: 'Valence — how positive a song sounds — in the lower half of its scale.' },
+  energetic: { field: 'energetic', says: 'are high-energy', color: 'var(--c-energy)', rule: 'Energy — how intense and driving a song feels — in the upper half of its scale.' },
+  danceable: { field: 'danceable', says: 'are danceable', color: 'var(--c-dance)', rule: 'Danceability — how steady and moving the beat is — in the upper half of its scale.' },
+  minor: { field: 'minor_share', says: 'are in a minor key', color: 'var(--c-minor)', rule: 'Written in a minor key rather than a major one: a darker, more ambiguous tonality.' },
+  electric: { field: 'electric', says: 'sound electric', color: 'var(--c-acoustic)', rule: 'Acousticness in the lower half of its scale: made with electric or digital instruments, not acoustic ones.' },
 }
 
 // Each journey opens on an explainer screen: the arc in one line, before the two dials that draw

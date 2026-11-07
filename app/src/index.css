@@ -365,6 +365,7 @@ em { font-style: normal; color: var(--accent); transition: color 0.3s ease; }
 .sb-half { stroke: var(--ink-2); stroke-width: 1px; opacity: 0.5; }
 .sb-value { paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
 .sb-now { fill: var(--ink); font-weight: 700; }
+.sb-title { fill: var(--ink); }
 /* The compact geometry renders at roughly 1 user unit per CSS px, so these ARE the rendered sizes
    — trimmed a little from the wide plane's, which would crowd a 320-unit box. */
 .moodspace.compact .ms-tick { font-size: 12px; }
@@ -520,6 +521,10 @@ figcaption { margin-top: 10px; color: var(--ink-2); font-size: 0.9rem; max-width
   /* Kept under the 52px --topbar: at 30px the mark plus 12px padding would overflow it. */
   .brand-mark { width: 22px; height: 22px; }
   .topbar-sub { font-size: 0.8rem; }
+  /* The smaller font alone did not keep them on one line: at 375–390px both still wrapped, and the
+     bar grew over the top of the pinned chart, hiding its first title. Never wrap; and below 420px,
+     where brand and tagline cannot share a line, the tagline goes. */
+  .brand, .topbar-sub { white-space: nowrap; }
 
   .deck { display: block; max-width: none; padding: 0; }
   /* Pinned under the topbar, so the plane is on screen for every decade. Opaque and z-raised
@@ -743,6 +748,10 @@ figcaption { margin-top: 10px; color: var(--ink-2); font-size: 0.9rem; max-width
      column here, so nothing else on this one can take the height. */
   .deck-page .step-decade { font-size: 2.2rem; }
   .deck-page .step-inner p { font-size: 1rem; line-height: 1.5; }
+}
+
+@media (max-width: 419px) {
+  .topbar-sub { display: none; }
 }
 
 /* ---- motion ---- */

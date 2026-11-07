@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 
 // The active decade's three representative tracks as compact Spotify players
-// (most popular, nearest the decade's mood centre). Keyed by id so they reload on change.
+// (popular, and typical of the decade on the journey's two measures). Keyed by id so they reload on change.
 //
 // `carousel` is the mobile deck's shape: the three players sit in one horizontally snapping
 // track you swipe between, with dots for position. The stacked layout used to show only the
@@ -35,7 +35,7 @@ export default function TrackEmbed({ tracks, decade, active, carousel }) {
           show there are three and which one you are on. */}
       {!carousel && (
         <div className="embed-caption">
-          Sounds like the <b>{decade}s</b> · 3 tracks nearest its centre
+          Sounds like the <b>{decade}s</b> · 3 songs typical of the decade
         </div>
       )}
       <div className="embed-list" onScroll={carousel ? onScroll : undefined}>
