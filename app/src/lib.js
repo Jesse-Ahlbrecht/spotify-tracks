@@ -357,6 +357,35 @@ export function useDebounced(value, delay = 140) {
   return settled
 }
 
+// ---- one Spotify preview at a time ------------------------------------------
+// Up to nine players are mounted at once (three per decade, ±1 decade), and each is its own
+// Spotify iframe, so nothing stopped two playing over each other. Spotify's embeds post their state
+// to the parent page (`playback_update`, the messages its iFrame API is built on) and accept
+// `{ command: 'pause' }` back, so: when one goes from paused to playing, pause every other. Only on
+// that transition — a playing embed keeps sending position ticks, and those must not re-broadcast.
+// Moving to another decade pauses everything: the player that was playing has just left the screen.
+// Only embeds known to be playing are sent a pause: one that has not played yet answers it with an
+// uncaught PlaybackError ("no list was loaded"), which check-scroll reports as a page error.
+const SPOTIFY = 'https://open.spotify.com'
+const pause = (windows) => windows.forEach((w) => w.postMessage({ command: 'pause' }, SPOTIFY))
+export function useOnePlayerAtATime(decade) {
+  const playing = useRef(new Set()) // the embeds' windows that are playing right now
+  useEffect(() => {
+    const onMessage = (e) => {
+      if (e.origin !== SPOTIFY || e.data?.type !== 'playback_update') return
+      const set = playing.current
+      if (e.data.payload?.isPaused !== false) set.delete(e.source)
+      else if (!set.has(e.source)) {
+        pause(set)
+        set.add(e.source)
+      }
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [])
+  useEffect(() => pause(playing.current), [decade])
+}
+
 // ---- is the referenced element on screen? ---------------------------------
 // `once: true` (the default) is the reveal the standalone beats use: latch on first sight, then stop
 // observing. `once: false` keeps toggling, for chrome that may float over only one section.

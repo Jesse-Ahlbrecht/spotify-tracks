@@ -839,3 +839,28 @@ the "better song picking" ideas above.
 
 **AI disclosure:** the mock-ups, the bar chart, the export change, the copy edits and this entry
 are Claude-generated (Opus 5.5), directed and chosen by Jesse.
+
+## 2026-11-07 — One song preview at a time, paused when the decade changes
+
+Jesse: two previews could play over each other, and a preview kept playing after scrolling away.
+Up to nine Spotify players are mounted at once (three per decade, ±1 decade), each its own iframe.
+
+Spotify's embeds post their state to the parent page (`playback_update` with `isPaused`, the same
+messages its iFrame API is built on) and accept `{ command: 'pause' }` back. Both directions were
+confirmed in the browser before relying on them. `useOnePlayerAtATime` (lib.js, called once in
+Journey) keeps the set of embeds that are playing: when another starts, the rest are paused; when
+the settled decade changes, all are paused. It acts on the paused→playing transition only, because
+a playing embed keeps sending position ticks.
+
+The first version paused every embed on the page. check-scroll caught that it was not harmless: an
+embed that has never played answers a pause with an uncaught `PlaybackError` ("no list was
+loaded"), which surfaced as page errors at every viewport. Only embeds known to be playing are
+paused now.
+
+**Verification:** desktop (Claude's browser pane) and the phone deck (Playwright, 390×844):
+starting a second preview pauses the first, a third pauses the second, and moving 1930s → 1940s
+pauses the one playing. `npm run check:scroll` 138/139 — the one failure is the caption-centring
+check that also fails on `main` in this environment.
+
+**AI disclosure:** the hook, its tests and this entry are Claude-generated (Opus 5.5), requested by
+Jesse.

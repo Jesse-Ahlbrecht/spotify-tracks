@@ -1,4 +1,4 @@
-import { useActiveStep, useDebounced, useIsMobile, useSizeVar } from '../lib.js'
+import { useActiveStep, useDebounced, useIsMobile, useOnePlayerAtATime, useSizeVar } from '../lib.js'
 import DecadeArrows from './DecadeArrows.jsx'
 import ShareBars from './ShareBars.jsx'
 import TrackEmbed from './TrackEmbed.jsx'
@@ -22,6 +22,9 @@ export default function Journey({ decades, tracks, journey }) {
   // Plane + captions follow scroll instantly; the visible embed swaps once scrolling
   // settles, so a fast scroll doesn't thrash which players are shown.
   const settled = useDebounced(active)
+  // Starting one song preview pauses whichever other one is playing, and settling on another
+  // decade pauses them all. Off `settled`, so a scroll that snaps back does not stop the music.
+  useOnePlayerAtATime(settled)
   // Desktop: the player stack's height as --embed-h, which lets the captions centre on the plane
   // rather than the viewport (see .step-inner in index.css).
   const stackRef = useSizeVar('--embed-h', '.journey', mobile)
