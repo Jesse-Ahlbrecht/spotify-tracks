@@ -1,5 +1,6 @@
-# Weekly grouped updates that wait 7 days after each release, matching the local
-# npm and uv delay. Security updates are not delayed. Nothing merges automatically.
+# Weekly updates that wait 7 days after each release, matching the local npm and
+# uv delay. Minor and patch updates come as one grouped PR per folder; each major
+# upgrade gets its own PR. Security updates are not delayed. Nothing merges automatically.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -9,8 +10,8 @@ updates:
     cooldown:
       default-days: 7
     groups:
-      npm-app:
-        patterns: ["*"]
+      npm-app-minor-patch:
+        update-types: ["minor", "patch"]
   - package-ecosystem: pip
     directory: "/"
     schedule:
@@ -18,8 +19,8 @@ updates:
     cooldown:
       default-days: 7
     groups:
-      python:
-        patterns: ["*"]
+      python-minor-patch:
+        update-types: ["minor", "patch"]
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
@@ -27,5 +28,5 @@ updates:
     cooldown:
       default-days: 7
     groups:
-      actions:
-        patterns: ["*"]
+      actions-minor-patch:
+        update-types: ["minor", "patch"]

@@ -7,6 +7,8 @@ name: Deploy app to GitHub Pages
 on:
   push:
     branches: [main]
+  # Pull requests (including Dependabot) only build; nothing is uploaded or deployed.
+  pull_request:
   workflow_dispatch:
 
 # Write access is granted only to the deploy job, which installs no dependencies.
@@ -15,7 +17,7 @@ permissions:
 
 # Allow one concurrent deploy; don't cancel an in-progress production deploy.
 concurrency:
-  group: pages
+  group: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.ref) || 'pages' }}
   cancel-in-progress: false
 
 jobs:
@@ -33,11 +35,13 @@ jobs:
           cache-dependency-path: app/package-lock.json
       - run: npm ci --ignore-scripts
       - run: npm run build
-      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with:
           path: app/dist
 
   deploy:
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     permissions:
