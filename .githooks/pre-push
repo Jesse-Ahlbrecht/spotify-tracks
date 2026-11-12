@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Tests must pass before anything reaches GitHub. Runs the checks on the commit being pushed,
+# in a temporary checkout, so uncommitted edits in this folder neither help nor hurt.
+# Enabled per clone with: git config core.hooksPath .githooks
+# Docs-only pushes skip the checks. Bypassing (--no-verify) is for emergencies only.
+set -euo pipefail
+
+checks() {   # $1 = repo folder, $2 = changed files
+  [ -d "$1/app/node_modules" ] && ln -s "$1/app/node_modules" app/node_modules
+  (cd app && npm run build)
+}
+
+# Packages and environments come from the main checkout, even when pushing from a worktree.
+root=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE   # the temporary checkout must use its own
+zero=0000000000000000000000000000000000000000
+status=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue                      # branch deletion
+  base=$remote_sha
+  if [ "$base" = "$zero" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+    base=$(git merge-base "$local_sha" origin/HEAD 2>/dev/null || true)
+  fi
+  changed=$( [ -n "$base" ] && git diff --name-only "$base" "$local_sha" || git ls-tree -r --name-only "$local_sha")
+  code=$(printf '%s\n' "$changed" | grep -vE '^docs/|\.md$' | grep -v '^$' || true)
+  if [ -z "$code" ]; then echo "[pre-push] $local_ref: docs only, checks skipped"; continue; fi
+  wt=$(mktemp -d "${TMPDIR:-/tmp}/pre-push.XXXXXX")
+  git worktree add --detach --quiet "$wt/src" "$local_sha"
+  cleanup() { git -C "$root" worktree remove --force "$wt/src" >/dev/null 2>&1 || true; rm -rf "$wt"; }
+  trap cleanup EXIT
+  echo "[pre-push] testing $(git log -1 --format='%h %s' "$local_sha" | cut -c1-70)"
+  start=$(date +%s)
+  # Not inside "if": bash would silently ignore set -e there, and a failing step could pass.
+  set +e
+  ( set -e; cd "$wt/src"; checks "$root" "$changed" )
+  rc=$?
+  set -e
+  if [ $rc -eq 0 ]; then
+    echo "[pre-push] passed in $(( $(date +%s) - start ))s"
+  else
+    echo "[pre-push] FAILED: push blocked. Fix the failure above, or see the hook for details." >&2
+    status=1
+  fi
+  cleanup; trap - EXIT
+done
+exit $status
