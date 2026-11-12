@@ -1,0 +1,31 @@
+# Weekly grouped updates that wait 7 days after each release, matching the local
+# npm and uv delay. Security updates are not delayed. Nothing merges automatically.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/app"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      npm-app:
+        patterns: ["*"]
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      python:
+        patterns: ["*"]
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
