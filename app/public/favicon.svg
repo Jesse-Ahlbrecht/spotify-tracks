@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- A single short tone: silence, one full-amplitude cycle, silence. The flat lead-in and
+       lead-out double as the timeline the wave oscillates about.
+       The tab bar follows the OS theme regardless of the page (which is light-only), so the
+       stroke flips to near-white on a dark tab. Browsers honour this inside rel="icon" SVGs. -->
+  <style>
+    .tone { stroke: #1d1d1f; }
+    @media (prefers-color-scheme: dark) { .tone { stroke: #f5f5f7; } }
+  </style>
+  <path class="tone" d="M4 32 H20 C24 2.7 28 2.7 32 32 C36 61.3 40 61.3 44 32 H60"
+        fill="none" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" />
+</svg>

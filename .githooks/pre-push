@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Tests must pass before anything reaches GitHub. Runs the checks on the commit being pushed,
+# in a temporary checkout, so uncommitted edits in this folder neither help nor hurt.
+# Enabled per clone with: git config core.hooksPath .githooks
+# Docs-only and hook-only pushes skip the checks, and a commit that already passed is not retested. Bypassing (--no-verify) is for emergencies only.
+set -euo pipefail
+
+# Use the main checkout's installed packages, unless this push changes the lockfile:
+# then install exactly what the commit specifies (install scripts stay off).
+deps() {   # $1 = repo folder, $2 = changed files, $3 = folder holding package-lock.json
+  local lock="$3/package-lock.json"; [ "$3" = . ] && lock=package-lock.json
+  if printf '%s\n' "$2" | grep -qxF "$lock"; then
+    echo "[pre-push] $lock changed: installing its exact versions"
+    (cd "$3" && npm ci --ignore-scripts --no-audit --no-fund >/dev/null)
+  elif [ -d "$1/$3/node_modules" ]; then
+    ln -s "$1/$3/node_modules" "$3/node_modules"
+  fi
+}
+
+checks() {   # $1 = repo folder, $2 = changed files
+  deps "$1" "$2" app
+  (cd app && npm run build)
+}
+
+# Packages and environments come from the main checkout, even when pushing from a worktree.
+root=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE   # the temporary checkout must use its own
+zero=0000000000000000000000000000000000000000
+passed_dir="$(git rev-parse --git-common-dir)/pre-push-passed"
+status=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue                      # branch deletion
+  base=$remote_sha
+  if [ "$base" = "$zero" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+    base=$(git merge-base "$local_sha" origin/HEAD 2>/dev/null || true)
+  fi
+  changed=$( [ -n "$base" ] && git diff --name-only "$base" "$local_sha" || git ls-tree -r --name-only "$local_sha")
+  code=$(printf '%s\n' "$changed" | grep -vE '^docs/|\.md$|^\.githooks/' | grep -v '^$' || true)
+  if [ -z "$code" ]; then echo "[pre-push] $local_ref: docs or hook only, checks skipped"; continue; fi
+  if [ -e "$passed_dir/$local_sha" ]; then echo "[pre-push] $(git log -1 --format=%h "$local_sha") already passed, not retested"; continue; fi
+  wt=$(mktemp -d "${TMPDIR:-/tmp}/pre-push.XXXXXX")
+  git worktree add --detach --quiet "$wt/src" "$local_sha"
+  cleanup() { git -C "$root" worktree remove --force "$wt/src" >/dev/null 2>&1 || true; rm -rf "$wt"; }
+  trap cleanup EXIT
+  echo "[pre-push] testing $(git log -1 --format='%h %s' "$local_sha" | cut -c1-70)"
+  start=$(date +%s)
+  # Not inside "if": bash would silently ignore set -e there, and a failing step could pass.
+  set +e
+  ( set -e; cd "$wt/src"; checks "$root" "$changed" )
+  rc=$?
+  set -e
+  if [ $rc -eq 0 ]; then
+    echo "[pre-push] passed in $(( $(date +%s) - start ))s"
+    # Long runs can outlast GitHub's connection; a retried push of this commit is then instant.
+    mkdir -p "$passed_dir" && touch "$passed_dir/$local_sha"
+  else
+    echo "[pre-push] FAILED: push blocked. Fix the failure above, or see the hook for details." >&2
+    status=1
+  fi
+  cleanup; trap - EXIT
+done
+exit $status

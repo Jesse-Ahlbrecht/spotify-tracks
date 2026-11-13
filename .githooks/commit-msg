@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Strip AI co-authorship trailers from commit messages.
+# Enable once per clone with:  git config core.hooksPath .githooks
+set -euo pipefail
+msg_file="$1"
+# Delete any "Co-authored-by: ... Claude ..." line (case-insensitive).
+sed -i -E '/^[[:space:]]*co-authored-by:.*claude/Id' "$msg_file"

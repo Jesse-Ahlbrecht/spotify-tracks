@@ -1,0 +1,171 @@
+/* The quick version (QuickFeed.jsx). Reuses the app's tokens and card styles.
+   One card per screen, one card per swipe or scroll, on phone and desktop alike. Mandatory snapping
+   is right here, unlike the long page (docs/design-notes.md, "Scrolling"), because every snap area
+   is exactly one screen. Desktop (.desk) only lays each card out larger. */
+.qf {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: center;
+  background: var(--page);
+}
+.qf-frame { position: relative; width: 100%; height: 100dvh; background: var(--page); }
+.qf-feed { height: 100%; overflow-y: auto; scroll-snap-type: y mandatory; overscroll-behavior: contain; scrollbar-width: none; }
+.qf-feed::-webkit-scrollbar { display: none; }
+.qf-card { scroll-snap-align: start; scroll-snap-stop: always; }
+
+/* ---- top bar: close, title, controls ---- */
+.qf-bar {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  align-items: center;
+  padding: calc(8px + env(safe-area-inset-top, 0px)) 10px 10px;
+  background: linear-gradient(var(--page) 75%, transparent);
+}
+.qf-icon { width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; color: var(--ink); font: inherit; font-size: 1.05rem; cursor: pointer; }
+.qf-where { text-align: center; font-weight: 700; font-size: 0.95rem; }
+.qf-tools { display: flex; }
+
+/* ---- cards (phone layout is the base) ---- */
+.qf-card {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 14px;
+  padding: calc(76px + env(safe-area-inset-top, 0px)) 22px calc(28px + env(safe-area-inset-bottom, 0px));
+}
+.qf-start h2 { margin: 0; font-size: clamp(2.2rem, 10vw, 3rem); line-height: 1.05; letter-spacing: -0.03em; }
+.qf-start p { margin: 0; color: var(--ink-2); font-size: 1.05rem; max-width: 60ch; }
+.qf-start .qf-meta { font-size: 0.85rem; color: var(--muted); }
+.qf-go {
+  align-self: start;
+  min-height: 48px;
+  padding: 12px 26px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.qf-decade { font-size: 1.05rem; font-weight: 800; color: var(--muted); }
+.qf-head { margin: 0; font-size: clamp(1.8rem, 8.5vw, 2.4rem); font-weight: 800; line-height: 1.08; letter-spacing: -0.03em; text-wrap: balance; }
+.qf-story { margin: 0; color: var(--ink-2); font-size: 1.05rem; line-height: 1.45; max-width: 46ch; }
+.qf-song { min-height: var(--player-box); }
+.qf-deep {
+  align-self: start;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 0.88rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+/* ---- phone ---- */
+/* The words and the song sit centred in the space above Next, which waits in the thumb zone at the
+   bottom of the card: the two auto margins split the slack between them. */
+.qf.phone .qf-decade-card { padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+.qf.phone .qf-decade-card .qf-decade, .qf-next { margin-top: auto; }
+/* Where you are in the century: one dot per decade down the right edge, clear of the card's 22px
+   gutter. Past decades filled, the current one larger. Decorative, and never in a swipe's way. */
+.qf-dots {
+  position: absolute;
+  right: 7px;
+  top: 50%;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.qf-dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--grid); transition: background 0.2s ease, transform 0.2s ease; }
+.qf-dots .past { background: var(--accent); opacity: 0.45; }
+.qf-dots .on { background: var(--accent); transform: scale(1.5); }
+/* Short phones: everything stays, a little tighter. */
+@media (max-height: 700px) {
+  .qf.phone .qf-card { gap: 10px; padding-top: calc(66px + env(safe-area-inset-top, 0px)); }
+  .qf.phone .qf-head { font-size: 1.65rem; }
+  .qf.phone .qf-story { font-size: 0.98rem; }
+}
+
+/* ---- desktop: the same feed, each card one centred column at a large size ---- */
+.qf.desk .qf-bar { padding: 14px 28px 10px; }
+.qf.desk .qf-card { gap: 18px; padding: 112px max(150px, calc((100% - 780px) / 2)) 88px; }
+.qf.desk .qf-decade { font-size: 1.3rem; }
+.qf.desk .qf-head { font-size: clamp(2.6rem, 5vw, 4.4rem); }
+.qf.desk .qf-story { font-size: 1.3rem; max-width: 40ch; }
+.qf.desk .qf-song { max-width: 560px; margin-top: 12px; }
+.qf.desk .qf-end .qf-go { margin-top: 8px; }
+.qf.desk .qf-start h2 { font-size: clamp(3rem, 6vw, 5rem); }
+.qf.desk .qf-start p { font-size: 1.25rem; }
+.qf-nav {
+  position: absolute;
+  left: 50%;
+  z-index: 3;
+  width: 48px;
+  height: 48px;
+  margin-left: -24px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--ink);
+  font: inherit;
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.qf-nav.prev { top: 58px; }
+.qf-nav.next { bottom: 22px; }
+.qf-nav:disabled { opacity: 0; pointer-events: none; }
+
+/* The decades down the right edge: a line through one dot per decade, past ones filled in. */
+.qf-timeline { position: absolute; right: 28px; top: 50%; z-index: 3; display: flex; flex-direction: column; transform: translateY(-50%); }
+.qf-timeline::before { content: ""; position: absolute; left: 5px; top: 14px; bottom: 14px; width: 2px; background: var(--grid); }
+.qf-timeline button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+  padding: 0 4px 0 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.qf-tl-dot { width: 12px; height: 12px; flex: none; box-sizing: border-box; border: 2px solid var(--grid); border-radius: 50%; background: var(--page); transition: transform 0.2s ease; }
+.qf-timeline .past { color: var(--ink-2); }
+.qf-timeline .past .qf-tl-dot { border-color: var(--accent); background: var(--accent); opacity: 0.45; }
+.qf-timeline .on { color: var(--ink); font-weight: 700; }
+.qf-timeline .on .qf-tl-dot { border-color: var(--accent); background: var(--accent); transform: scale(1.35); }
+
+/* Hover only where a pointer can hover: on touch it latches after a tap (see index.css). */
+@media (hover: hover) {
+  .qf-icon:hover { background: var(--grid); }
+  .qf-timeline button:hover { color: var(--ink); }
+}
+
+/* ---- the two ways in, side by side where the scroll cue used to be ---- */
+.mode-choice { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+/* Doubled class: this file can load before index.css, whose .explore-btn would otherwise win. */
+.explore-btn.mode-quick { background: var(--accent); color: #fff; border-color: transparent; }
+@media (hover: hover) {
+  .explore-btn.mode-quick:hover { color: #fff; border-color: transparent; opacity: 0.9; }
+}

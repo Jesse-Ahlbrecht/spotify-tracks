@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- viewport-fit=cover so env(safe-area-inset-*) resolves to real values rather than 0 on a
+         device with a home indicator; .to-top adds it to its bottom offset. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="A scroll-driven journey through 100 years of recorded music's mood." />
+    <!-- SVG only: it inverts itself on a dark tab bar, which an .ico cannot do. Browsers without
+         SVG favicon support simply show no icon. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- Warm up connections to Spotify so the per-decade track embeds load faster -->
+    <link rel="preconnect" href="https://open.spotify.com" />
+    <link rel="preconnect" href="https://open.spotifycdn.com" />
+    <link rel="preconnect" href="https://i.scdn.co" />
+    <title>The Sound of Time — 100 years of mood</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

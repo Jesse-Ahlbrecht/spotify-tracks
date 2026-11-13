@@ -1,0 +1,192 @@
+import { useState, useEffect } from 'react'
+import {
+  useData,
+  useIsMobile,
+  useSettleToStep,
+  pauseAllSongs,
+  playDecade,
+  scrollToIntro as toIntro,
+  scrollToTop as toTop,
+  scrollToReadingLine,
+  JOURNEYS,
+} from './lib.js'
+import Journey from './components/Journey.jsx'
+import QuickFeed from './components/QuickFeed.jsx'
+import JourneyIntro from './components/JourneyIntro.jsx'
+import Beat from './components/Beat.jsx'
+import { WorldChart } from './charts/WorldChart.jsx'
+
+export default function App() {
+  const { data, error, retry } = useData()
+  const [jid, setJid] = useState(JOURNEYS[0].id)
+  const [showTop, setShowTop] = useState(false)
+  const [quick, setQuick] = useState(false) // the quick version is open
+  const mobile = useIsMobile()
+  // The deck snaps its own pages, so the settle glide is desktop-only — see useSettleToStep.
+  useSettleToStep(mobile ? null : '.step')
+
+  // Nothing carries over from one story or mode to the next. Removing a player silences it, but a
+  // song in both stories keeps its player — and the full journey stays mounted behind the quick one.
+  useEffect(pauseAllSongs, [jid, quick])
+
+  useEffect(() => {
+    // The deck does not render the button, so there is nothing to show or hide — and a setState per
+    // scroll would re-render the whole journey, plane and players included, to change nothing.
+    if (mobile) return
+    const onScroll = () => setShowTop(window.scrollY > window.innerHeight * 0.8)
+    window.addEventListener('scroll', onScroll, { passive: true })
+    onScroll()
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [mobile])
+
+  if (!data) {
+    return <main className="loading">
+      {error ? <div role="alert"><h1>Unable to load the music</h1><p>{error}</p>
+        <button className="explore-btn" onClick={retry}>Try again</button></div>
+        : <p role="status">Loading a century of music…</p>}
+    </main>
+  }
+
+  const { decades } = data.timeline
+  const journey = JOURNEYS.find((j) => j.id === jid)
+  const accent = journey.accent
+
+  return (
+    <div className="app" style={{ '--accent': accent }}>
+      <header className="topbar">
+        {/* The logo goes back to the top, as a site's logo usually does. */}
+        <a className="brand" href="#" onClick={(e) => { e.preventDefault(); toTop() }}>
+          {/* Same mark as the favicon. currentColor, not a hard-coded ink: the page is light-only
+              today, so this tracks --ink and would invert for free if a dark theme ever lands.
+              aria-hidden because the text beside it already names the site. */}
+          <svg className="brand-mark" viewBox="0 0 64 64" aria-hidden="true">
+            <path
+              d="M4 32 H20 C24 2.7 28 2.7 32 32 C36 61.3 40 61.3 44 32 H60"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          The Sound of Time
+        </a>
+        <span className="topbar-sub">How a century changed its tune.</span>
+      </header>
+
+      <section className="hero">
+        <p className="hero-kicker">100 years of recorded music · 1920s → 2020s</p>
+        <h1>
+          Music from the 1920s is <em>different</em>.
+          <br />
+          But <span className="hl">how</span>?
+        </h1>
+        <p className="hero-lede">
+          Every song Spotify knows carries a handful of numbers — how positive it sounds, how
+          intense, how danceable, whether it’s in a major or minor key. Line up a century of them
+          and the sound of music turns out to have shifted in clear, and often surprising, ways —
+          several threads that don’t all point the same direction.{' '}
+          {/* Dropped on phones, where the four story buttons stack directly beneath this and say
+              the same thing at a cost of three lines the hero cannot spare. */}
+          <span className="lede-tail">Pick a story below and travel it decade by decade.</span>
+        </p>
+        <div id="stories" className="story-toggle" role="tablist" aria-label="Pick a story">
+          {JOURNEYS.map((j) => (
+            <button
+              key={j.id}
+              role="tab"
+              aria-selected={j.id === jid}
+              className={`story-seg ${j.id === jid ? 'active' : ''}`}
+              style={{ '--seg-accent': j.accent }}
+              onClick={() => {
+                if (j.id !== jid) {
+                  setJid(j.id)
+                  toIntro() // its "Dive in" button takes it from there
+                }
+              }}
+            >
+              {j.tab}
+            </button>
+          ))}
+        </div>
+        {/* Two ways through the selected story. */}
+        <div className="scroll-cue mode-choice">
+          <button className="explore-btn" onClick={toIntro}>
+            Full journey <span className="cue-arrow">↓</span>
+          </button>
+          <button className="explore-btn mode-quick" onClick={() => setQuick(true)}>
+            Quick swipe
+          </button>
+        </div>
+      </section>
+
+      {/* Keyed so switching stories remounts the explainer and its reveal replays. */}
+      <JourneyIntro key={journey.id} journey={journey} />
+
+      <Journey decades={decades} tracks={data.tracks} journey={journey} />
+
+      {quick && (
+        <QuickFeed
+          journey={journey}
+          decades={decades}
+          tracks={data.tracks}
+          onClose={() => setQuick(false)}
+          onSwitch={(id) => setJid(id)}
+          onFullJourney={() => {
+            setQuick(false)
+            playDecade(0) // in the tap itself (playSong), if its players are mounted yet
+            requestAnimationFrame(() => scrollToReadingLine('.step'))
+          }}
+        />
+      )}
+
+      {journey.coda && (
+        <Beat
+          kicker="Coda"
+          title="Does music mirror the world?"
+          lede="You’d think harder times make sadder songs. Tested against the economy and against how people say they feel, music’s mood tracks neither — it follows a path of its own."
+        >
+          <WorldChart world={data.world} />
+        </Beat>
+      )}
+
+      <div className="explore-more">
+        <button className="explore-btn" onClick={toTop}>
+          ↑ Explore another journey
+        </button>
+      </div>
+
+      <footer className="footer">
+        <p>
+          <b>The takeaway:</b> across a century, music grew <em>more intense</em> (electrification),
+          <em> more minor-key</em> (a steady tonal darkening), and <em>a little less positive</em> —
+          though by a wandering route: a mid-century low, a seventies rebound, then a slide that’s
+          still going. Three threads that don’t all point the same way, and none of which simply
+          mirror the world around them. Why the darkening? Likely genre, the streaming economy, and
+          culture — but that’s the next question, not this dataset’s answer.
+        </p>
+        <p className="credits">
+          Built from ~587k tracks (1922–2021) + US economic series (FRED). An exploratory,
+          correlational read — see the{' '}
+          <a href="https://github.com/Jesse-Ahlbrecht/spotify-tracks/blob/main/docs/findings.md">methods and caveats</a>{' '}
+          and <a href="https://github.com/Jesse-Ahlbrecht/spotify-tracks/tree/main/notebooks">analysis notebooks</a>.
+          {' '}This is a historical catalog sample, not all music; early decades are sparse.
+          Song previews via Spotify.
+        </p>
+      </footer>
+
+      {/* Desktop only. On the deck it floats over a page whose whole lower half is the songs, and
+          a phone's own scroll-to-top gestures already cover it — the arrows went for the same
+          reason: fixed chrome costs more on a small screen than it gives back. */}
+      {!mobile && (
+        <button
+          className={`to-top ${showTop ? 'show' : ''}`}
+          aria-label="Jump to the top"
+          onClick={toTop}
+        >
+          ↑ Jump to top
+        </button>
+      )}
+    </div>
+  )
+}
