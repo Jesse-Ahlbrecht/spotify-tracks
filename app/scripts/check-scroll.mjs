@@ -335,7 +335,17 @@ async function checkQuickFeed(page, label, phone) {
     await page.waitForFunction(() => document.querySelector('.qf-where')?.textContent.endsWith('1930s'), null, { timeout: 3000 }).catch(() => {})
     const where = await page.evaluate(() => document.querySelector('.qf-where').textContent)
     check(`a tap on Next moves the quick version one card (${label})`, where.endsWith('1930s'), `now at “${where}”`)
+  } else {
+    await page.keyboard.press('ArrowDown')
+    await page.waitForFunction(() => document.querySelector('.qf-where')?.textContent.endsWith('1920s'), null, { timeout: 3000 }).catch(() => {})
   }
+  // A refresh comes back to the quick version, on the same card — not to the long page.
+  const before = await page.evaluate(() => document.querySelector('.qf-where').textContent)
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('.qf .qf-card', { timeout: 15_000 }).catch(() => {})
+  await page.waitForTimeout(500)
+  const after = await page.evaluate(() => document.querySelector('.qf-where')?.textContent ?? 'closed')
+  check(`a refresh keeps the quick version open on its card (${label})`, after === before, `“${before}” → “${after}”`)
   await page.getByRole('button', { name: 'Close the quick version' }).click()
   await page.waitForSelector('.qf', { state: 'detached' })
 }
@@ -347,6 +357,17 @@ async function runMobile(browser, { width, height, label }) {
     hasTouch: true,
     isMobile: true,
     deviceScaleFactor: 3,
+  })
+  // Which tracks have started playing, as the app learns it (usePlayedTracks): a decade whose song
+  // has played is kept mounted on purpose, so the player-window check leaves those decades out.
+  await ctx.addInitScript(() => {
+    if (window.top !== window) return
+    window.__played = new Set()
+    addEventListener('message', (e) => {
+      if (e.origin !== 'https://open.spotify.com' || e.data?.type !== 'playback_update' || e.data.payload?.isPaused !== false) return
+      const id = e.data.payload.playingURI?.split(':').pop()
+      if (id) window.__played.add(id)
+    })
   })
   const mp = await ctx.newPage()
   const mErrors = []
@@ -577,9 +598,24 @@ async function runMobile(browser, { width, height, label }) {
 
   // A ±1 decade window: three decades × three tracks. Mounting only the current decade was tried
   // and reverted — its players then load as you arrive, which reads as the embed blanking out
-  // mid-scroll. This is the ceiling, so a wider window cannot creep back in unnoticed.
-  const frames = await mp.evaluate(() => document.querySelectorAll('.embed-list iframe').length)
-  check(`the player window stays at ±1 decade (${label})`, frames <= 9, `${frames} iframes`)
+  // mid-scroll. This is the ceiling, so a wider window cannot creep back in unnoticed. Decades whose
+  // song has played (a Next tap starts one) stay mounted by design — removing a played Spotify embed
+  // stalls the ones after it — so they are not counted against the window.
+  const win = await mp.evaluate(() => {
+    const groups = [...document.querySelectorAll('.journey .embed-list')]
+    const ids = (g) => [...g.querySelectorAll('iframe')].map((f) => f.src.match(/\/track\/([^?]+)/)?.[1])
+    const unplayed = groups.filter((g) => !ids(g).some((id) => window.__played.has(id)))
+    return {
+      all: groups.reduce((n, g) => n + g.querySelectorAll('iframe').length, 0),
+      unplayed: unplayed.reduce((n, g) => n + g.querySelectorAll('iframe').length, 0),
+      kept: groups.length - unplayed.length,
+    }
+  })
+  check(
+    `the player window stays at ±1 decade, besides decades already played (${label})`,
+    win.unplayed <= 9,
+    `${win.unplayed} iframes in decades not played, ${win.all} in all (${win.kept} decade(s) kept because a song played)`,
+  )
 
   // A swipe down moves exactly one decade — no skipping, no sticking.
   const dBefore = await activeDecade(mp)

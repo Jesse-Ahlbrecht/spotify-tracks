@@ -8,6 +8,8 @@ import {
   scrollToIntro as toIntro,
   scrollToTop as toTop,
   scrollToReadingLine,
+  readPlace,
+  writePlace,
   JOURNEYS,
 } from './lib.js'
 import Journey from './components/Journey.jsx'
@@ -18,9 +20,12 @@ import { WorldChart } from './charts/WorldChart.jsx'
 
 export default function App() {
   const { data, error, retry } = useData()
-  const [jid, setJid] = useState(JOURNEYS[0].id)
+  const [place] = useState(readPlace) // where a refresh left off
+  const [jid, setJid] = useState(place.story)
   const [showTop, setShowTop] = useState(false)
-  const [quick, setQuick] = useState(false) // the quick version is open
+  const [quick, setQuick] = useState(place.card != null) // the quick version is open
+  const [card, setCard] = useState(place.card ?? 0) // ...at this card
+  useEffect(() => writePlace(jid, quick ? card : null), [jid, quick, card])
   const mobile = useIsMobile()
   // The deck snaps its own pages, so the settle glide is desktop-only — see useSettleToStep.
   useSettleToStep(mobile ? null : '.step')
@@ -114,7 +119,7 @@ export default function App() {
           <button className="explore-btn" onClick={toIntro}>
             Full journey <span className="cue-arrow">↓</span>
           </button>
-          <button className="explore-btn mode-quick" onClick={() => setQuick(true)}>
+          <button className="explore-btn mode-quick" onClick={() => { setCard(0); setQuick(true) }}>
             Quick swipe
           </button>
         </div>
@@ -130,6 +135,8 @@ export default function App() {
           journey={journey}
           decades={decades}
           tracks={data.tracks}
+          startCard={card}
+          onCard={setCard}
           onClose={() => setQuick(false)}
           onSwitch={(id) => setJid(id)}
           onFullJourney={() => {

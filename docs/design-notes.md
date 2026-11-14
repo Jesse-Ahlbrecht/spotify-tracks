@@ -82,6 +82,10 @@ dependency for the layout checks only.
 - **Quick version:** a full-screen feed, one card per decade, with a headline, one line of story
   and one song, and no charts. On a phone each card has a Next button and a column of dots down the
   right edge shows progress; on desktop there are ↑/↓ arrows and a decade timeline.
+- **The address keeps the place.** The story (when not the first) and, while the quick version is
+  open, its card live in the query string (`?story=beat&quick=3`, via `replaceState`, so no history
+  entries), and a refresh returns to them. Without it a refresh reopened the first story's long
+  page at the scroll position the browser restored.
 
 ## Scrolling
 
@@ -140,9 +144,13 @@ messages they post to the page and the `play` / `pause` commands they accept.
   autoplay and for embeds that have already played; they skip an embed a handler asked within the
   last few seconds. `play` is never sent to an embed that is already playing or has not yet sent
   `ready` (it throws inside the embed); likewise `pause` goes only to embeds known to be playing.
-- **Swipes cannot start a new song in Safari**, because a swipe is not a gesture it accepts. If the
-  current song has never played and has not started about 1.2 s after its player loaded, a
-  "Tap to play" button of the page's own covers the player.
+- **Swipes cannot start a new song in Safari**, because a swipe is not a gesture it accepts, so a
+  "Tap to play" button of the page's own covers the current player until that player has played.
+  On iOS and iPadOS, where every browser is WebKit, it shows as soon as the card or page lands.
+  Elsewhere it waits about 1.2 s for the browser to start the song by itself, and shows at once
+  from then on if a song failed to start after the reader had already tapped or clicked. "Has
+  played" belongs to the player, not the song: the same song in the other journey is another
+  player and needs its own tap.
 - **One song at a time.** Starting a song pauses the others. Moving on pauses what is playing: a
   new decade in the full journey, a new card in the quick version (including the start and end
   cards, which have no song), a change of story or mode, or leaving the journey for the hero,

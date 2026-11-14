@@ -42,8 +42,9 @@ export default function Journey({ decades, tracks, journey }) {
   useEffect(() => {
     if (here < 0 && !document.querySelector('.qf')) pauseAllBut(null)
   }, [here])
-  // The decade being read, while its first song has not played: what "Tap to play" may offer.
-  const armed = (i) => i === here && i === settled && !!songs(i)?.[0] && !played.has(songs(i)[0].id)
+  // The decade being read: its first song is what "Tap to play" may offer. Whether that player has
+  // played is Player's to know — the same song played in the quick version is another player.
+  const armed = (i) => i === here && i === settled && !!songs(i)?.[0]
   // A decade whose players have been played stays mounted outside the window: removing a played
   // Spotify embed stalls every one played after it (usePlayedTracks).
   const inWindow = (i) => Math.abs(i - settled) <= 1 || !!songs(i)?.slice(0, 3).some((t) => played.has(t.id))

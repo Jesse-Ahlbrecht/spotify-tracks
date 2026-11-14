@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { JOURNEYS, pauseAllBut, pauseAllSongs, playSong, useAutoplay, useIsMobile, usePlayedTracks } from '../lib.js'
 import Player from './Player.jsx'
 import './QuickFeed.css'
@@ -22,14 +22,16 @@ const Speaker = ({ on }) => (
   </Icon>
 )
 
-export default function QuickFeed({ journey, decades, tracks, onClose, onFullJourney, onSwitch }) {
+// `startCard` is where it opens (after a refresh, the card the reader was on); `onCard` reports each
+// card that comes to the front, so App can keep it in the address.
+export default function QuickFeed({ journey, decades, tracks, startCard = 0, onCard, onClose, onFullJourney, onSwitch }) {
   const mobile = useIsMobile()
   const feedRef = useRef(null)
   const cardRefs = useRef([])
-  const [active, setActive] = useState(0)
+  const count = decades.length + 2 // start + decades + end
+  const [active, setActive] = useState(() => Math.min(startCard, count - 1))
   const [sound, setSound] = useState(true)
   const played = usePlayedTracks() // played embeds stay mounted — removing one stalls the rest
-  const count = decades.length + 2 // start + decades + end
   const isDecade = (c) => c > 0 && c < count - 1
   const next = JOURNEYS[(JOURNEYS.findIndex((j) => j.id === journey.id) + 1) % JOURNEYS.length]
   const frame = (card) => cardRefs.current[card]?.querySelector('iframe')?.contentWindow
@@ -51,8 +53,22 @@ export default function QuickFeed({ journey, decades, tracks, onClose, onFullJou
     return () => io.disconnect()
   }, [journey.id, mobile])
 
-  // Back to the start card when the story changes.
-  useEffect(() => { feedRef.current?.scrollTo({ top: 0 }); setActive(0) }, [journey.id])
+  // Open at the starting card, before the first paint.
+  useLayoutEffect(() => {
+    const feed = feedRef.current, card = cardRefs.current[active]
+    if (feed && card) feed.scrollTop = card.offsetTop
+  }, []) // once, on opening
+
+  // Back to the start card when the story changes. Compared with the story shown, not run on mount:
+  // that would undo the starting card (and StrictMode mounts twice).
+  const shownStory = useRef(journey.id)
+  useEffect(() => {
+    if (shownStory.current === journey.id) return
+    shownStory.current = journey.id
+    feedRef.current?.scrollTo({ top: 0 })
+    setActive(0)
+  }, [journey.id])
+  useEffect(() => { onCard?.(active) }, [active])
 
   // Play the landing card's song, however the reader got there. (Starting one pauses the others —
   // useOnePlayerAtATime, mounted by the full journey, sees these embeds too.)
@@ -148,7 +164,7 @@ export default function QuickFeed({ journey, decades, tracks, onClose, onFullJou
                 <p className="qf-story">{story}</p>
                 <div className="qf-song">
                   {song && (Math.abs(card - active) <= 1 || played.has(song.id)) && (
-                    <Player track={song} armed={sound && card === active && !played.has(song.id)} />
+                    <Player track={song} armed={sound && card === active} />
                   )}
                 </div>
                 {mobile && (

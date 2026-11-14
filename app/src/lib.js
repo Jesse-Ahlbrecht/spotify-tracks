@@ -390,11 +390,22 @@ export const pauseAllSongs = () => pause(playing)
 // embed ("no list was loaded"). useAutoplay plays one that becomes ready while it is wanted.
 const asked = new WeakMap() // embed window → when it was last asked to play
 const JUST_ASKED = 4000
-const justAsked = (w) => performance.now() - (asked.get(w) ?? -Infinity) < JUST_ASKED
+export const justAsked = (w) => performance.now() - (asked.get(w) ?? -Infinity) < JUST_ASKED
 const ready = new WeakSet()
 addEventListener('message', (e) => {
   if (e.origin === SPOTIFY && e.data?.type === 'ready') ready.add(e.source)
 })
+export const isReady = (w) => ready.has(w)
+
+// Whether a song that has never played starts only from a tap, so "Tap to play" (Player.jsx) can
+// show the moment a swipe lands instead of after waiting for an autoplay that will not come. Known up
+// front on iOS and iPadOS, where every browser is WebKit (iPadOS calls itself a Mac with a touch
+// screen; a Chrome that does is desktop Chrome emulating touch); elsewhere learned the first time a
+// song does not start although the reader has already tapped or clicked on the page.
+const UA = navigator.userAgent
+let tapNeeded = /iP(hone|ad|od)/.test(UA) || (/Macintosh/.test(UA) && navigator.maxTouchPoints > 1 && !/Chrome/.test(UA))
+export const needsTap = () => tapNeeded
+export const noteNeedsTap = () => { tapNeeded = true }
 export function playSong(w, dedupe = false) {
   if (!w || !ready.has(w) || playing.has(w) || (dedupe && justAsked(w))) return
   asked.set(w, performance.now())
@@ -650,3 +661,21 @@ export const JOURNEYS = [
   { id: 'sad', tab: 'Two kinds of sad', measures: ['sad', 'minor'], accent: 'var(--c-minor)', captions: SAD_CAPTIONS, quick: QUICK.sad, intro: INTROS.sad },
   { id: 'intensity', tab: 'Why so intense', measures: ['electric', 'energetic'], accent: 'var(--c-acoustic)', captions: INTENSITY_CAPTIONS, quick: QUICK.intensity, intro: INTROS.intensity },
 ]
+
+// Where the reader is, kept in the address so a refresh comes back to it: the story (when it is not
+// the first) and, while the quick version is open, its card (`?story=beat&quick=3`). replaceState,
+// so moving around adds no history entries. Without it a refresh fell back to the first story with
+// the quick version closed, while the browser restored the long page's scroll position.
+export function readPlace() {
+  const q = new URLSearchParams(location.search)
+  const story = JOURNEYS.some((j) => j.id === q.get('story')) ? q.get('story') : JOURNEYS[0].id
+  const card = q.has('quick') ? Math.max(0, parseInt(q.get('quick'), 10) || 0) : null
+  return { story, card }
+}
+export function writePlace(story, card) {
+  const q = new URLSearchParams()
+  if (story !== JOURNEYS[0].id) q.set('story', story)
+  if (card != null) q.set('quick', card)
+  const search = q.toString()
+  history.replaceState(history.state, '', `${location.pathname}${search ? `?${search}` : ''}${location.hash}`)
+}
