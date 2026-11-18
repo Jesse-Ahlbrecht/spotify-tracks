@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { isReady, justAsked, needsTap, noteNeedsTap, playSong } from '../lib.js'
+import { isReady, justAskedByUser, needsTap, noteNeedsTap, playSongFromGesture } from '../lib.js'
 
 const VERB = window.matchMedia('(pointer: coarse)').matches ? 'Tap' : 'Click'
 
@@ -30,7 +30,7 @@ export default function Player({ track, lazy, armed }) {
   useEffect(() => {
     setLate(false)
     if (!waiting) return
-    const asked = justAsked(ref.current?.contentWindow)
+    const asked = justAskedByUser(ref.current?.contentWindow)
     const t = setTimeout(() => {
       setLate(true)
       // Not started although the page has had a tap or click: this browser needs one per song.
@@ -57,7 +57,7 @@ export default function Player({ track, lazy, armed }) {
         }}
       />
       {waiting && late && (
-        <button className="tap-play" onClick={() => playSong(ref.current?.contentWindow)}>
+        <button className="tap-play" onClick={() => playSongFromGesture(ref.current?.contentWindow)}>
           <span>▶ {VERB} to play</span>
         </button>
       )}

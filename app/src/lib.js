@@ -389,8 +389,10 @@ export const pauseAllSongs = () => pause(playing)
 // Only embeds that have said `ready` are asked: like `pause`, a `play` before then throws inside the
 // embed ("no list was loaded"). useAutoplay plays one that becomes ready while it is wanted.
 const asked = new WeakMap() // embed window → when it was last asked to play
+const askedByUser = new WeakMap()
 const JUST_ASKED = 4000
-export const justAsked = (w) => performance.now() - (asked.get(w) ?? -Infinity) < JUST_ASKED
+const justAsked = (w) => performance.now() - (asked.get(w) ?? -Infinity) < JUST_ASKED
+export const justAskedByUser = (w) => performance.now() - (askedByUser.get(w) ?? -Infinity) < JUST_ASKED
 const ready = new WeakSet()
 addEventListener('message', (e) => {
   if (e.origin === SPOTIFY && e.data?.type === 'ready') ready.add(e.source)
@@ -406,17 +408,20 @@ const UA = navigator.userAgent
 let tapNeeded = /iP(hone|ad|od)/.test(UA) || (/Macintosh/.test(UA) && navigator.maxTouchPoints > 1 && !/Chrome/.test(UA))
 export const needsTap = () => tapNeeded
 export const noteNeedsTap = () => { tapNeeded = true }
-export function playSong(w, dedupe = false) {
+function playSong(w, { dedupe = false, userInitiated = false } = {}) {
   if (!w || !ready.has(w) || playing.has(w) || (dedupe && justAsked(w))) return
-  asked.set(w, performance.now())
+  const requestedAt = performance.now()
+  asked.set(w, requestedAt)
+  if (userInitiated) askedByUser.set(w, requestedAt)
   w.postMessage({ command: 'play' }, SPOTIFY)
 }
+export const playSongFromGesture = (w) => playSong(w, { userInitiated: true })
 // Pause everything playing except `keep` and a song a tap has just asked for, which may not have
 // reported playing yet — for whenever the reader moves on from a song.
 export const pauseAllBut = (keep) => pause([...playing].filter((w) => w !== keep && !justAsked(w)))
 // The first song of the full journey's decade `i` (TrackEmbed marks its group with data-songs).
 export const playDecade = (i) =>
-  playSong(document.querySelector(`.journey [data-songs="${i}"] iframe`)?.contentWindow)
+  playSongFromGesture(document.querySelector(`.journey [data-songs="${i}"] iframe`)?.contentWindow)
 
 export function useOnePlayerAtATime(decade) {
   useEffect(() => {
@@ -444,7 +449,7 @@ export function useAutoplay(selector) {
   useEffect(() => {
     if (!selector) return
     const frame = () => document.querySelector(selector)?.contentWindow
-    playSong(frame(), true)
+    playSong(frame(), { dedupe: true })
     const onReady = (e) => {
       if (e.origin === SPOTIFY && e.data?.type === 'ready' && e.source === frame()) playSong(e.source)
     }
@@ -673,9 +678,11 @@ export function readPlace() {
   return { story, card }
 }
 export function writePlace(story, card) {
-  const q = new URLSearchParams()
+  const q = new URLSearchParams(location.search)
   if (story !== JOURNEYS[0].id) q.set('story', story)
+  else q.delete('story')
   if (card != null) q.set('quick', card)
+  else q.delete('quick')
   const search = q.toString()
   history.replaceState(history.state, '', `${location.pathname}${search ? `?${search}` : ''}${location.hash}`)
 }

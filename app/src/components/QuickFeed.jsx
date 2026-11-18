@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { JOURNEYS, pauseAllBut, pauseAllSongs, playSong, useAutoplay, useIsMobile, usePlayedTracks } from '../lib.js'
+import { JOURNEYS, pauseAllBut, pauseAllSongs, playSongFromGesture, useAutoplay, useIsMobile, usePlayedTracks } from '../lib.js'
 import Player from './Player.jsx'
 import './QuickFeed.css'
 
@@ -92,7 +92,7 @@ export default function QuickFeed({ journey, decades, tracks, startCard = 0, ret
   // only way iOS Safari starts it (playSong). A swipe is not such a gesture; "Tap to play" covers it.
   const jump = (card) => {
     const c = go(card)
-    if (sound) playSong(frame(c))
+    if (sound) playSongFromGesture(frame(c))
   }
   const step = (d) => jump(active + d)
 
@@ -126,7 +126,7 @@ export default function QuickFeed({ journey, decades, tracks, startCard = 0, ret
 
   const toggleSound = () => {
     if (sound) pauseAllSongs() // whichever is playing, a song a tap has just asked for included
-    else playSong(frame(active))
+    else playSongFromGesture(frame(active))
     setSound((s) => !s)
   }
   const cardProps = (card, cls) => ({ 'data-card': card, ref: (el) => (cardRefs.current[card] = el), className: `qf-card ${cls}` })
