@@ -24,8 +24,9 @@ const Speaker = ({ on }) => (
 
 // `startCard` is where it opens (after a refresh, the card the reader was on); `onCard` reports each
 // card that comes to the front, so App can keep it in the address.
-export default function QuickFeed({ journey, decades, tracks, startCard = 0, onCard, onClose, onFullJourney, onSwitch }) {
+export default function QuickFeed({ journey, decades, tracks, startCard = 0, returnFocusRef, onCard, onClose, onFullJourney, onSwitch }) {
   const mobile = useIsMobile()
+  const dialogRef = useRef(null)
   const feedRef = useRef(null)
   const cardRefs = useRef([])
   const count = decades.length + 2 // start + decades + end
@@ -36,13 +37,18 @@ export default function QuickFeed({ journey, decades, tracks, startCard = 0, onC
   const next = JOURNEYS[(JOURNEYS.findIndex((j) => j.id === journey.id) + 1) % JOURNEYS.length]
   const frame = (card) => cardRefs.current[card]?.querySelector('iframe')?.contentWindow
 
-  // The page behind does not scroll while this is open.
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const dialog = dialogRef.current
     const html = document.documentElement
-    const was = html.style.overflow
+    const overflow = html.style.overflow
+    dialog.showModal()
     html.style.overflow = 'hidden'
-    return () => { html.style.overflow = was }
-  }, [])
+    return () => {
+      dialog.close()
+      html.style.overflow = overflow
+      returnFocusRef.current?.focus({ preventScroll: true })
+    }
+  }, [returnFocusRef])
 
   // Which card fills the screen is read from the scroll.
   useEffect(() => {
@@ -112,16 +118,11 @@ export default function QuickFeed({ journey, decades, tracks, startCard = 0, onC
     return () => { frame.removeEventListener('wheel', onWheel); clearTimeout(quiet) }
   }, [mobile])
 
-  useEffect(() => {
-    const onKey = (e) => {
-      if (e.key === 'Escape') return onClose()
-      const fwd = ['ArrowDown', 'ArrowRight', 'PageDown'].includes(e.key)
-      const back = ['ArrowUp', 'ArrowLeft', 'PageUp'].includes(e.key)
-      if (fwd || back) { e.preventDefault(); step(fwd ? 1 : -1) }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  })
+  const onKey = (e) => {
+    const fwd = ['ArrowDown', 'ArrowRight', 'PageDown'].includes(e.key)
+    const back = ['ArrowUp', 'ArrowLeft', 'PageUp'].includes(e.key)
+    if (fwd || back) { e.preventDefault(); step(fwd ? 1 : -1) }
+  }
 
   const toggleSound = () => {
     if (sound) pauseAllSongs() // whichever is playing, a song a tap has just asked for included
@@ -131,8 +132,9 @@ export default function QuickFeed({ journey, decades, tracks, startCard = 0, onC
   const cardProps = (card, cls) => ({ 'data-card': card, ref: (el) => (cardRefs.current[card] = el), className: `qf-card ${cls}` })
 
   return (
-    <div className={`qf ${mobile ? 'phone' : 'desk'}`} role="dialog" aria-modal="true"
-      aria-label={`${journey.tab}, quick version`} style={{ '--accent': journey.accent }}>
+    <dialog ref={dialogRef} className={`qf ${mobile ? 'phone' : 'desk'}`}
+      aria-label={`${journey.tab}, quick version`} style={{ '--accent': journey.accent }}
+      onKeyDown={onKey} onCancel={(event) => { event.preventDefault(); onClose() }}>
       <div className="qf-frame">
         <header className="qf-bar">
           <button className="qf-icon" onClick={onClose} aria-label="Close the quick version">✕</button>
@@ -211,6 +213,6 @@ export default function QuickFeed({ journey, decades, tracks, startCard = 0, onC
           </>
         )}
       </div>
-    </div>
+    </dialog>
   )
 }

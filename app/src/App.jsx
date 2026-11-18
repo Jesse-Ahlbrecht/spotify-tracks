@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   useData,
   useIsMobile,
@@ -23,6 +23,7 @@ export default function App() {
   const [place] = useState(readPlace) // where a refresh left off
   const [jid, setJid] = useState(place.story)
   const [showTop, setShowTop] = useState(false)
+  const quickTrigger = useRef(null)
   const [quick, setQuick] = useState(place.card != null) // the quick version is open
   const [card, setCard] = useState(place.card ?? 0) // ...at this card
   useEffect(() => writePlace(jid, quick ? card : null), [jid, quick, card])
@@ -119,7 +120,7 @@ export default function App() {
           <button className="explore-btn" onClick={toIntro}>
             Full journey <span className="cue-arrow">↓</span>
           </button>
-          <button className="explore-btn mode-quick" onClick={() => { setCard(0); setQuick(true) }}>
+          <button ref={quickTrigger} className="explore-btn mode-quick" aria-haspopup="dialog" onClick={() => { setCard(0); setQuick(true) }}>
             Quick swipe
           </button>
         </div>
@@ -136,6 +137,7 @@ export default function App() {
           decades={decades}
           tracks={data.tracks}
           startCard={card}
+          returnFocusRef={quickTrigger}
           onCard={setCard}
           onClose={() => setQuick(false)}
           onSwitch={(id) => setJid(id)}

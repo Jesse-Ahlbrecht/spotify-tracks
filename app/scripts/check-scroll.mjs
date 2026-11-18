@@ -287,8 +287,15 @@ const awaitPlayers = (page) =>
 // progress indicator replaces the old row of dashes.
 async function checkQuickFeed(page, label, phone) {
   await toTop(page)
-  await page.getByRole('button', { name: 'Quick swipe' }).click()
+  const opener = page.getByRole('button', { name: 'Quick swipe' })
+  const close = page.getByRole('button', { name: 'Close the quick version' })
+  await opener.click()
   await page.waitForSelector('.qf .qf-card')
+  const focusOnOpen = await close.evaluate((button) => button === document.activeElement)
+  await page.keyboard.press('Tab')
+  const focusInDialog = await page.evaluate(() => !!document.activeElement.closest('.qf:modal'))
+  await page.keyboard.press('Shift+Tab')
+  check(`quick version opens with focus inside its modal (${label})`, focusOnOpen && focusInDialog)
   const qf = await page.evaluate(() => {
     const cards = [...document.querySelectorAll('.qf-decade-card')]
     const feed = document.querySelector('.qf-feed')
@@ -346,8 +353,10 @@ async function checkQuickFeed(page, label, phone) {
   await page.waitForTimeout(500)
   const after = await page.evaluate(() => document.querySelector('.qf-where')?.textContent ?? 'closed')
   check(`a refresh keeps the quick version open on its card (${label})`, after === before, `“${before}” → “${after}”`)
-  await page.getByRole('button', { name: 'Close the quick version' }).click()
+  await close.click()
   await page.waitForSelector('.qf', { state: 'detached' })
+  check(`closing the quick version returns focus to its opener (${label})`,
+    await opener.evaluate((button) => button === document.activeElement))
 }
 
 async function runMobile(browser, { width, height, label }) {
